@@ -45,19 +45,19 @@ use builder::{Builder, Step};
 //      })
 //      .run(move |s| native::llvm(build, s.target));
 
-#[derive(Serialize)]
-pub struct Llvm<'a> {
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Llvm {
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Llvm<'a> {
+impl Step for Llvm {
     type Output = ();
     const ONLY_HOSTS: bool = true;
 
     /// Compile LLVM for `target`.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
         // If we're using a custom LLVM bail out here, but we can only use a
         // custom LLVM for the build triple.
         if let Some(config) = build.config.target_config.get(target) {
@@ -152,8 +152,8 @@ impl<'a> Step<'a> for Llvm<'a> {
         }
 
         // http://llvm.org/docs/HowToCrossCompileLLVM.html
-        if target != build.build {
-            builder.ensure(Llvm { target: &build.build });
+        if *target != build.build {
+            builder.ensure(Llvm { target: build.build.to_owned() });
             // FIXME: if the llvm root for the build triple is overridden then we
             //        should use llvm-tblgen from there, also should verify that it
             //        actually exists most of the time in normal installs of LLVM.
@@ -244,12 +244,12 @@ fn check_llvm_version(build: &Build, llvm_config: &Path) {
 //rules.build("test-helpers", "src/rt/rust_test_helpers.c")
 //     .run(move |s| native::test_helpers(build, s.target));
 
-#[derive(Serialize)]
-pub struct TestHelpers<'a> {
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TestHelpers {
+    pub target: String,
 }
 
-impl<'a> Step<'a> for TestHelpers<'a> {
+impl Step for TestHelpers {
     type Output = ();
 
     fn should_run(_builder: &Builder, path: &Path) -> bool {
@@ -257,14 +257,14 @@ impl<'a> Step<'a> for TestHelpers<'a> {
     }
 
     fn make_run(builder: &Builder, _path: Option<&Path>, _host: &str, target: &str) {
-        builder.ensure(TestHelpers { target })
+        builder.ensure(TestHelpers { target: target.to_owned() })
     }
 
     /// Compiles the `rust_test_helpers.c` library which we used in various
     /// `run-pass` test suites for ABI testing.
     fn run(self, builder: &Builder) {
-        let build = builder.build;
-        let target = self.target;
+        let build = &builder.build;
+        let target = &self.target;
         let dst = build.test_helpers_out(target);
         let src = build.src.join("src/rt/rust_test_helpers.c");
         if up_to_date(&src, &dst.join("librust_test_helpers.a")) {
@@ -304,12 +304,12 @@ const OPENSSL_SHA256: &'static str =
 //rules.build("openssl", "path/to/nowhere")
 //     .run(move |s| native::openssl(build, s.target));
 
-#[derive(Serialize)]
-pub struct Openssl<'a> {
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Openssl {
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Openssl<'a> {
+impl Step for Openssl {
     type Output = ();
 
     fn should_run(_builder: &Builder, _path: &Path) -> bool {
@@ -318,7 +318,7 @@ impl<'a> Step<'a> for Openssl<'a> {
 
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
         let out = match build.openssl_dir(target) {
             Some(dir) => dir,
             None => return,
@@ -382,7 +382,7 @@ impl<'a> Step<'a> for Openssl<'a> {
         configure.arg("no-ssl2");
         configure.arg("no-ssl3");
 
-        let os = match target {
+        let os = match &**target {
             "aarch64-linux-android" => "linux-aarch64",
             "aarch64-unknown-linux-gnu" => "linux-aarch64",
             "arm-linux-androideabi" => "android",

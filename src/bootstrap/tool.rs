@@ -44,14 +44,14 @@ use channel::GitInfo;
 //     .run(move |s| compile::maybe_clean_tools(build, s.stage, s.target, Mode::Libstd));
 //
 
-#[derive(Serialize)]
-pub struct CleanTools<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct CleanTools {
     pub stage: u32,
-    pub target: &'a str,
+    pub target: String,
     pub mode: Mode,
 }
 
-impl<'a> Step<'a> for CleanTools<'a> {
+impl Step for CleanTools {
     type Output = ();
 
     /// Build a tool in `src/tools`
@@ -61,10 +61,10 @@ impl<'a> Step<'a> for CleanTools<'a> {
     fn run(self, builder: &Builder) {
         let build = builder.build;
         let stage = self.stage;
-        let target = self.target;
+        let target = &self.target;
         let mode = self.mode;
 
-        let compiler = builder.compiler(stage, &build.build);
+        let compiler = &builder.compiler(stage, &build.build);
 
         let stamp = match mode {
             Mode::Libstd => libstd_stamp(build, compiler, target),
@@ -77,15 +77,15 @@ impl<'a> Step<'a> for CleanTools<'a> {
     }
 }
 
-#[derive(Serialize)]
-pub struct ToolBuild<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ToolBuild {
     pub stage: u32,
-    pub target: &'a str,
-    pub tool: &'a str,
+    pub target: String,
+    pub tool: &'static str,
     pub mode: Mode,
 }
 
-impl<'a> Step<'a> for ToolBuild<'a> {
+impl Step for ToolBuild {
     type Output = PathBuf;
 
     /// Build a tool in `src/tools`
@@ -99,13 +99,16 @@ impl<'a> Step<'a> for ToolBuild<'a> {
         let tool = self.tool;
 
         let compiler = builder.compiler(stage, &build.build);
-        builder.ensure(CleanTools { stage, target, mode: self.mode });
+        builder.ensure(CleanTools { stage, target: target.clone(), mode: self.mode });
         match self.mode {
-            Mode::Libstd => builder.ensure(compile::Std { compiler, target }),
-            Mode::Libtest => builder.ensure(compile::Test { compiler, target }),
-            Mode::Librustc => builder.ensure(compile::Rustc { compiler, target }),
+            Mode::Libstd => builder.ensure(compile::Std { compiler: compiler.clone(), target: target.clone() }),
+            Mode::Libtest => builder.ensure(compile::Test { compiler: compiler.clone(), target: target.clone() }),
+            Mode::Librustc => builder.ensure(compile::Rustc { compiler: compiler.clone(), target: target.clone() }),
             Mode::Tool => panic!("unexpected Mode::Tool for tool build")
         }
+
+        let target = &target;
+        let compiler = &compiler;
 
         let _folder = build.fold_output(|| format!("stage{}-{}", stage, tool));
         println!("Building stage{} tool {} ({})", stage, tool, target);
@@ -138,7 +141,7 @@ impl<'a> Step<'a> for ToolBuild<'a> {
         }
 
         build.run(&mut cargo);
-        build.cargo_out(compiler, Mode::Tool, target).join(exe(tool, compiler.host))
+        build.cargo_out(compiler, Mode::Tool, target).join(exe(tool, &compiler.host))
     }
 }
 
@@ -157,7 +160,7 @@ macro_rules! tool {
                     $(Tool::$name =>
                         self.ensure($name {
                             stage: 0,
-                            target: &self.build.build,
+                            target: self.build.build.clone(),
                         }),
                     )+
                 }
@@ -165,13 +168,13 @@ macro_rules! tool {
         }
 
         $(
-        #[derive(Serialize)]
-        pub struct $name<'a> {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $name {
             pub stage: u32,
-            pub target: &'a str,
+            pub target: String,
         }
 
-        impl<'a> Step<'a> for $name<'a> {
+        impl Step for $name {
             type Output = PathBuf;
 
             fn should_run(_builder: &Builder, path: &Path) -> bool {
@@ -181,7 +184,7 @@ macro_rules! tool {
             fn make_run(builder: &Builder, _path: Option<&Path>, _host: &str, target: &str) {
                 builder.ensure($name {
                     stage: builder.top_stage,
-                    target,
+                    target: target.to_owned(),
                 });
             }
 
@@ -251,13 +254,13 @@ tool!(
     RustInstaller, "src/tools/rust-installer", "rust-installer", Mode::Libstd;
 );
 
-#[derive(Serialize)]
-pub struct RemoteTestServer<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RemoteTestServer {
     pub stage: u32,
-    pub target: &'a str,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for RemoteTestServer<'a> {
+impl Step for RemoteTestServer {
     type Output = PathBuf;
 
     fn should_run(_builder: &Builder, path: &Path) -> bool {
@@ -267,7 +270,7 @@ impl<'a> Step<'a> for RemoteTestServer<'a> {
     fn make_run(builder: &Builder, _path: Option<&Path>, _host: &str, target: &str) {
         builder.ensure(RemoteTestServer {
             stage: builder.top_stage,
-            target,
+            target: target.to_owned(),
         });
     }
 
@@ -295,13 +298,13 @@ impl<'a> Step<'a> for RemoteTestServer<'a> {
 //           .host(&build.build)
 //      })
 //      .run(move |s| compile::tool(build, s.stage, s.target, "cargo"));
-#[derive(Serialize)]
-pub struct Cargo<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Cargo {
     pub stage: u32,
-    pub target: &'a str,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Cargo<'a> {
+impl Step for Cargo {
     type Output = PathBuf;
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
@@ -316,19 +319,19 @@ impl<'a> Step<'a> for Cargo<'a> {
         }
         builder.ensure(Cargo {
             stage: builder.top_stage,
-            target,
+            target: target.to_owned(),
         });
     }
 
     fn run(self, builder: &Builder) -> PathBuf {
         builder.ensure(native::Openssl {
-            target: self.target,
+            target: self.target.clone(),
         });
         // Cargo depends on procedural macros, which requires a full host
         // compiler to be available, so we need to depend on that.
         builder.ensure(Rustc {
             compiler: builder.compiler(builder.top_stage, &builder.build.build),
-            target: &builder.build.build,
+            target: builder.build.build.clone(),
         });
         builder.ensure(ToolBuild {
             stage: self.stage,
@@ -352,13 +355,13 @@ impl<'a> Step<'a> for Cargo<'a> {
 //      })
 //      .run(move |s| compile::tool(build, s.stage, s.target, "rls"));
 //
-#[derive(Serialize)]
-pub struct Rls<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Rls {
     pub stage: u32,
-    pub target: &'a str,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Rls<'a> {
+impl Step for Rls {
     type Output = PathBuf;
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
@@ -373,19 +376,19 @@ impl<'a> Step<'a> for Rls<'a> {
         }
         builder.ensure(Cargo {
             stage: builder.top_stage,
-            target,
+            target: target.to_owned(),
         });
     }
 
     fn run(self, builder: &Builder) -> PathBuf {
         builder.ensure(native::Openssl {
-            target: self.target,
+            target: self.target.clone(),
         });
         // RLS depends on procedural macros, which requires a full host
         // compiler to be available, so we need to depend on that.
         builder.ensure(Rustc {
             compiler: builder.compiler(builder.top_stage, &builder.build.build),
-            target: &builder.build.build,
+            target: builder.build.build.clone(),
         });
         builder.ensure(ToolBuild {
             stage: self.stage,
@@ -411,19 +414,19 @@ impl<'a> Builder<'a> {
     /// Notably this munges the dynamic library lookup path to point to the
     /// right location to run `compiler`.
     fn prepare_tool_cmd(&self, compiler: Compiler, cmd: &mut Command) {
-        let host = compiler.host;
+        let host = &compiler.host;
         let mut paths = vec![
-            self.sysroot_libdir(compiler, compiler.host),
-            self.cargo_out(compiler, Mode::Tool, host).join("deps"),
+            self.sysroot_libdir(&compiler, &host),
+            self.cargo_out(&compiler, Mode::Tool, host).join("deps"),
         ];
 
         // On MSVC a tool may invoke a C compiler (e.g. compiletest in run-make
         // mode) and that C compiler may need some extra PATH modification. Do
         // so here.
-        if compiler.host.contains("msvc") {
+        if host.contains("msvc") {
             let curpaths = env::var_os("PATH").unwrap_or_default();
             let curpaths = env::split_paths(&curpaths).collect::<Vec<_>>();
-            for &(ref k, ref v) in self.cc[compiler.host].0.env() {
+            for &(ref k, ref v) in self.cc[host].0.env() {
                 if k != "PATH" {
                     continue
                 }

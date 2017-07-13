@@ -8,9 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use serde::{Serialize, Deserialize};
-
+use std::any::{Any, TypeId};
 use std::cell::RefCell;
+use std::fmt::Debug;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::fs;
@@ -21,7 +22,7 @@ use install;
 use dist;
 use util::{exe, libdir, add_lib_path};
 use {Build, Mode};
-use cache::{Cache, Key};
+use cache::Cache;
 use check;
 use flags::Subcommand;
 use doc;
@@ -34,7 +35,7 @@ pub struct Builder<'a> {
     pub top_stage: u32,
     pub kind: Kind,
     cache: Cache,
-    stack: RefCell<Vec<Key>>,
+    stack: RefCell<Vec<(TypeId, Box<Any>)>>,
 }
 
 impl<'a> Deref for Builder<'a> {
@@ -45,7 +46,7 @@ impl<'a> Deref for Builder<'a> {
     }
 }
 
-pub trait Step<'a>: Serialize + Sized {
+pub trait Step: Clone + Debug + PartialEq + Eq + Hash + 'static {
     /// The output type of this step. This is used in a few places to return a
     /// `PathBuf` when directories are created or to return a `Compiler` once
     /// it's been assembled.
@@ -54,7 +55,7 @@ pub trait Step<'a>: Serialize + Sized {
     /// in a prearranged directory that will later be used by the build system.
     /// It's not always practical, however, since it makes avoiding rebuilds
     /// somewhat harder.
-    type Output: Serialize + Deserialize<'a> + 'a;
+    type Output: Clone;
 
     const DEFAULT: bool = false;
 
@@ -69,13 +70,13 @@ pub trait Step<'a>: Serialize + Sized {
 
     /// Primary function to execute this rule. Can call `builder.ensure(...)`
     /// with other steps to run those.
-    fn run(self, builder: &'a Builder) -> Self::Output;
+    fn run(self, builder: &Builder) -> Self::Output;
 
     /// When bootstrap is passed a set of paths, this controls whether this rule
     /// will execute. However, it does not get called in a "default" context
     /// when we are not passed any paths; in that case, make_run is called
     /// directly.
-    fn should_run(_builder: &'a Builder, _path: &Path) -> bool { false }
+    fn should_run(_builder: &Builder, _path: &Path) -> bool { false }
 
     /// Build up a "root" rule, either as a default rule or from a path passed
     /// to us.
@@ -84,10 +85,10 @@ pub trait Step<'a>: Serialize + Sized {
     /// passed. When `./x.py build` is run, for example, this rule could get
     /// called if it is in the correct list below with a path of `None`.
     fn make_run(
-        _builder: &'a Builder,
+        _builder: &Builder,
         _path: Option<&Path>,
-        _host: &'a str,
-        _target: &'a str,
+        _host: &str,
+        _target: &str,
     ) { unimplemented!() }
 }
 
@@ -173,39 +174,39 @@ impl<'a> Builder<'a> {
     /// not take `Compiler` since all `Compiler` instances are meant to be
     /// obtained through this function, since it ensures that they are valid
     /// (i.e., built and assembled).
-    pub fn compiler(&'a self, stage: u32, host: &'a str) -> Compiler<'a> {
-        self.ensure(compile::Assemble { target_compiler: Compiler { stage, host } })
+    pub fn compiler(&'a self, stage: u32, host: &'a str) -> Compiler {
+        self.ensure(compile::Assemble { target_compiler: Compiler { stage, host: host.to_owned() } })
     }
 
-    pub fn sysroot(&self, compiler: Compiler<'a>) -> PathBuf {
-        self.ensure(compile::Sysroot { compiler })
+    pub fn sysroot(&self, compiler: &Compiler) -> PathBuf {
+        self.ensure(compile::Sysroot { compiler: compiler.to_owned() })
     }
 
     /// Returns the libdir where the standard library and other artifacts are
     /// found for a compiler's sysroot.
-    pub fn sysroot_libdir(&self, compiler: Compiler<'a>, target: &'a str) -> PathBuf {
-        #[derive(Serialize)]
-        struct Libdir<'a> {
-            compiler: Compiler<'a>,
-            target: &'a str,
+    pub fn sysroot_libdir(&self, compiler: &Compiler, target: &'a str) -> PathBuf {
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        struct Libdir {
+            compiler: Compiler,
+            target: String,
         }
-        impl<'a> Step<'a> for Libdir<'a> {
+        impl Step for Libdir {
             type Output = PathBuf;
             fn run(self, builder: &Builder) -> PathBuf {
-                let compiler = self.compiler;
+                let compiler = &self.compiler;
                 let lib = if compiler.stage >= 2 && builder.build.config.libdir_relative.is_some() {
                     builder.build.config.libdir_relative.clone().unwrap()
                 } else {
                     PathBuf::from("lib")
                 };
-                let sysroot = builder.sysroot(self.compiler).join(lib)
+                let sysroot = builder.sysroot(compiler).join(lib)
                     .join("rustlib").join(self.target).join("lib");
                 let _ = fs::remove_dir_all(&sysroot);
                 t!(fs::create_dir_all(&sysroot));
                 sysroot
             }
         }
-        self.ensure(Libdir { compiler, target })
+        self.ensure(Libdir { compiler: compiler.to_owned(), target: target.to_owned() })
     }
 
     /// Returns the compiler's libdir where it stores the dynamic libraries that
@@ -213,17 +214,17 @@ impl<'a> Builder<'a> {
     ///
     /// For example this returns `<sysroot>/lib` on Unix and `<sysroot>/bin` on
     /// Windows.
-    pub fn rustc_libdir(&self, compiler: Compiler) -> PathBuf {
+    pub fn rustc_libdir(&self, compiler: &Compiler) -> PathBuf {
         if compiler.is_snapshot(self) {
             self.build.rustc_snapshot_libdir()
         } else {
-            self.sysroot(compiler).join(libdir(compiler.host))
+            self.sysroot(compiler).join(libdir(&compiler.host))
         }
     }
 
     /// Adds the compiler's directory of dynamic libraries to `cmd`'s dynamic
     /// library lookup path.
-    pub fn add_rustc_lib_path(&self, compiler: Compiler, cmd: &mut Command) {
+    pub fn add_rustc_lib_path(&self, compiler: &Compiler, cmd: &mut Command) {
         // Windows doesn't need dylib path munging because the dlls for the
         // compiler live next to the compiler and the system will find them
         // automatically.
@@ -235,19 +236,19 @@ impl<'a> Builder<'a> {
     }
 
     /// Get a path to the compiler specified.
-    pub fn rustc(&self, compiler: Compiler) -> PathBuf {
+    pub fn rustc(&self, compiler: &Compiler) -> PathBuf {
         if compiler.is_snapshot(self) {
             self.initial_rustc.clone()
         } else {
-            self.sysroot(compiler).join("bin").join(exe("rustc", compiler.host))
+            self.sysroot(compiler).join("bin").join(exe("rustc", &compiler.host))
         }
     }
 
     /// Get the `rustdoc` executable next to the specified compiler
-    pub fn rustdoc(&self, compiler: Compiler) -> PathBuf {
+    pub fn rustdoc(&self, compiler: &Compiler) -> PathBuf {
         let mut rustdoc = self.rustc(compiler);
         rustdoc.pop();
-        rustdoc.push(exe("rustdoc", compiler.host));
+        rustdoc.push(exe("rustdoc", &compiler.host));
         rustdoc
     }
 
@@ -259,7 +260,7 @@ impl<'a> Builder<'a> {
     /// it will pass the `--target` flag for the specified `target`, and will be
     /// executing the Cargo command `cmd`.
     pub fn cargo(&self,
-             compiler: Compiler,
+             compiler: &Compiler,
              mode: Mode,
              target: &str,
              cmd: &str) -> Command {
@@ -423,7 +424,7 @@ impl<'a> Builder<'a> {
         cargo
     }
 
-    fn maybe_run<S: Step<'a>>(&'a self, path: Option<&Path>) {
+    fn maybe_run<S: Step>(&'a self, path: Option<&Path>) {
         let build = self.build;
         let hosts = if S::ONLY_BUILD_TARGETS || S::ONLY_BUILD {
             &build.config.host[..1]
@@ -463,33 +464,37 @@ impl<'a> Builder<'a> {
     /// Ensure that a given step is built, returning it's output. This will
     /// cache the step, so it is safe (and good!) to call this as often as
     /// needed to ensure that all dependencies are built.
-    pub fn ensure<S: Step<'a>>(&'a self, step: S) -> S::Output {
-        let key = Cache::to_key(&step);
+    pub fn ensure<S: Step>(&'a self, step: S) -> S::Output {
+        let type_id = TypeId::of::<S>();
         {
             let mut stack = self.stack.borrow_mut();
-            if stack.contains(&key) {
+            for &(stack_type_id, ref stack_step) in stack.iter() {
+                if !(type_id == stack_type_id && step == *stack_step.downcast_ref().unwrap()) {
+                    continue
+                }
                 let mut out = String::new();
-                out += &format!("\n\nCycle in build detected when adding {:?}\n", key);
+                out += &format!("\n\nCycle in build detected when adding {:?}\n", step);
                 for el in stack.iter().rev() {
                     out += &format!("\t{:?}\n", el);
                 }
                 panic!(out);
             }
-            if let Some(out) = self.cache.get::<S::Output>(&key) {
-                self.build.verbose(&format!("{}c {:?}", "  ".repeat(stack.len()), key));
+            if let Some(out) = self.cache.get(&step) {
+                self.build.verbose(&format!("{}c {:?}", "  ".repeat(stack.len()), step));
 
                 return out;
             }
-            self.build.verbose(&format!("{}> {:?}", "  ".repeat(stack.len()), key));
-            stack.push(key.clone());
+            self.build.verbose(&format!("{}> {:?}", "  ".repeat(stack.len()), step));
+            stack.push((type_id, Box::new(step.clone())));
         }
-        let out = step.run(self);
+        let out = step.clone().run(self);
         {
             let mut stack = self.stack.borrow_mut();
-            assert_eq!(stack.pop().as_ref(), Some(&key));
+            let (cur_type_id, cur_step) = stack.pop().expect("step stack empty");
+            assert_eq!((cur_type_id, cur_step.downcast_ref()), (type_id, Some(&step)));
         }
-        self.build.verbose(&format!("{}< {:?}", "  ".repeat(self.stack.borrow().len()), key));
-        self.cache.put(key.clone(), &out);
-        self.cache.get::<S::Output>(&key).unwrap()
+        self.build.verbose(&format!("{}< {:?}", "  ".repeat(self.stack.borrow().len()), step));
+        self.cache.put(step, out.clone());
+        out
     }
 }

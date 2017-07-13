@@ -20,7 +20,7 @@
 use std::fs::{self, File};
 use std::io::prelude::*;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use Mode;
@@ -34,12 +34,12 @@ use compile;
 macro_rules! book {
     ($($name:ident, $path:expr, $book_name:expr;)+) => {
         $(
-        #[derive(Serialize)]
-        pub struct $name<'a> {
-            target: &'a str,
+        #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $name {
+            target: String,
         }
 
-        impl<'a> Step<'a> for $name<'a> {
+        impl Step for $name {
             type Output = ();
             const DEFAULT: bool = true;
 
@@ -54,14 +54,14 @@ macro_rules! book {
                 }
 
                 builder.ensure($name {
-                    target,
+                    target: target.to_owned(),
                 });
             }
 
             fn run(self, builder: &Builder) {
                 builder.ensure(Rustbook {
                     target: self.target,
-                    name: $book_name,
+                    name: $book_name.to_owned(),
                 })
             }
         }
@@ -92,13 +92,13 @@ book!(
     Reference, "src/doc/reference", "reference";
 );
 
-#[derive(Serialize)]
-pub struct Rustbook<'a> {
-    target: &'a str,
-    name: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Rustbook {
+    target: String,
+    name: String,
 }
 
-impl<'a> Step<'a> for Rustbook<'a> {
+impl Step for Rustbook {
     type Output = ();
 
     /// Invoke `rustbook` for `target` for the doc book `name`.
@@ -110,7 +110,7 @@ impl<'a> Step<'a> for Rustbook<'a> {
         builder.ensure(RustbookSrc {
             target: self.target,
             name: self.name,
-            src: &src,
+            src: src,
         });
     }
 }
@@ -128,12 +128,12 @@ impl<'a> Step<'a> for Rustbook<'a> {
 //                                     s.target,
 //                                     "unstable-book",
 //                                     &build.md_doc_out(s.target)));
-#[derive(Serialize)]
-pub struct UnstableBook<'a> {
-    target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct UnstableBook {
+    target: String,
 }
 
-impl<'a> Step<'a> for UnstableBook<'a> {
+impl Step for UnstableBook {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -148,30 +148,30 @@ impl<'a> Step<'a> for UnstableBook<'a> {
         }
 
         builder.ensure(UnstableBook {
-            target,
+            target: target.to_owned(),
         });
     }
 
     fn run(self, builder: &Builder) {
         builder.ensure(UnstableBookGen {
-            target: self.target,
+            target: self.target.clone(),
         });
         builder.ensure(RustbookSrc {
-            target: self.target,
-            name: "unstable-book",
-            src: &builder.build.md_doc_out(self.target),
+            target: self.target.clone(),
+            name: "unstable-book".to_owned(),
+            src: builder.build.md_doc_out(&self.target),
         })
     }
 }
 
-#[derive(Serialize)]
-pub struct RustbookSrc<'a> {
-    target: &'a str,
-    name: &'a str,
-    src: &'a Path,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct RustbookSrc {
+    target: String,
+    name: String,
+    src: PathBuf,
 }
 
-impl<'a> Step<'a> for RustbookSrc<'a> {
+impl Step for RustbookSrc {
     type Output = ();
 
     /// Invoke `rustbook` for `target` for the doc book `name` from the `src` path.
@@ -180,8 +180,8 @@ impl<'a> Step<'a> for RustbookSrc<'a> {
     /// already been generated.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
-        let name = self.name;
+        let target = &self.target;
+        let name = &self.name;
         let src = self.src;
         let out = build.doc_out(target);
         t!(fs::create_dir_all(&out));
@@ -213,13 +213,13 @@ impl<'a> Step<'a> for RustbookSrc<'a> {
 //      .default(build.config.docs)
 //      .run(move |s| doc::book(build, s.target, "book"));
 
-#[derive(Serialize)]
-pub struct TheBook<'a> {
-    target: &'a str,
-    name: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TheBook {
+    target: String,
+    name: &'static str,
 }
 
-impl<'a> Step<'a> for TheBook<'a> {
+impl Step for TheBook {
     type Output = ();
 
     fn should_run(_builder: &Builder, path: &Path) -> bool {
@@ -233,7 +233,7 @@ impl<'a> Step<'a> for TheBook<'a> {
         }
 
         builder.ensure(TheBook {
-            target,
+            target: target.to_owned(),
             name: "book",
         });
     }
@@ -248,18 +248,18 @@ impl<'a> Step<'a> for TheBook<'a> {
     /// * Redirect pages
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
         let name = self.name;
         // build book first edition
         builder.ensure(Rustbook {
-            target: target,
-            name: &format!("{}/first-edition", name),
+            target: target.to_owned(),
+            name: format!("{}/first-edition", name),
         });
 
         // build book second edition
         builder.ensure(Rustbook {
-            target: target,
-            name: &format!("{}/second-edition", name),
+            target: target.to_owned(),
+            name: format!("{}/second-edition", name),
         });
 
         // build the index page
@@ -283,7 +283,7 @@ fn invoke_rustdoc(builder: &Builder, target: &str, markdown: &str) {
     let build = builder.build;
     let out = build.doc_out(target);
 
-    let compiler = builder.compiler(0, &build.build);
+    let compiler = &builder.compiler(0, &build.build);
 
     let path = build.src.join("src/doc").join(markdown);
 
@@ -335,12 +335,12 @@ fn invoke_rustdoc(builder: &Builder, target: &str, markdown: &str) {
 //      .default(build.config.docs)
 //      .run(move |s| doc::standalone(build, s.target));
 
-#[derive(Serialize)]
-pub struct Standalone<'a> {
-    target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Standalone {
+    target: String,
 }
 
-impl<'a> Step<'a> for Standalone<'a> {
+impl Step for Standalone {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -355,7 +355,7 @@ impl<'a> Step<'a> for Standalone<'a> {
         }
 
         builder.ensure(Standalone {
-            target,
+            target: target.to_owned(),
         });
     }
 
@@ -369,12 +369,12 @@ impl<'a> Step<'a> for Standalone<'a> {
     /// In the end, this is just a glorified wrapper around rustdoc!
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
         println!("Documenting standalone ({})", target);
         let out = build.doc_out(target);
         t!(fs::create_dir_all(&out));
 
-        let compiler = builder.compiler(0, &build.build);
+        let compiler = &builder.compiler(0, &build.build);
 
         let favicon = build.src.join("src/doc/favicon.inc");
         let footer = build.src.join("src/doc/footer.inc");
@@ -441,13 +441,13 @@ impl<'a> Step<'a> for Standalone<'a> {
 //          .run(move |s| doc::std(build, s.stage, s.target));
 // }
 
-#[derive(Serialize)]
-pub struct Std<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Std {
     stage: u32,
-    target: &'a str,
+    target: String,
 }
 
-impl<'a> Step<'a> for Std<'a> {
+impl Step for Std {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -461,7 +461,7 @@ impl<'a> Step<'a> for Std<'a> {
         let run = || {
             builder.ensure(Std {
                 stage: builder.top_stage,
-                target
+                target: target.to_owned(),
             });
         };
 
@@ -485,18 +485,18 @@ impl<'a> Step<'a> for Std<'a> {
     fn run(self, builder: &Builder) {
         let build = builder.build;
         let stage = self.stage;
-        let target = self.target;
+        let target = &self.target;
         println!("Documenting stage{} std ({})", stage, target);
         let out = build.doc_out(target);
         t!(fs::create_dir_all(&out));
         let compiler = builder.compiler(stage, &build.build);
-        let compiler = if build.force_use_stage1(compiler, target) {
-            builder.compiler(1, compiler.host)
+        let compiler = &if build.force_use_stage1(&compiler, target) {
+            builder.compiler(1, &compiler.host)
         } else {
             compiler
         };
 
-        builder.ensure(compile::Std { compiler, target });
+        builder.ensure(compile::Std { compiler: compiler.to_owned(), target: target.to_owned() });
         let out_dir = build.stage_out(compiler, Mode::Libstd)
                            .join(target).join("doc");
         let rustdoc = builder.rustdoc(compiler);
@@ -552,13 +552,13 @@ impl<'a> Step<'a> for Std<'a> {
 //          .run(move |s| doc::test(build, s.stage, s.target));
 // }
 
-#[derive(Serialize)]
-pub struct Test<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Test {
     stage: u32,
-    target: &'a str,
+    target: String,
 }
 
-impl<'a> Step<'a> for Test<'a> {
+impl Step for Test {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -572,7 +572,7 @@ impl<'a> Step<'a> for Test<'a> {
         let run = || {
             builder.ensure(Test {
                 stage: builder.top_stage,
-                target
+                target: target.to_owned(),
             });
         };
 
@@ -596,21 +596,21 @@ impl<'a> Step<'a> for Test<'a> {
     fn run(self, builder: &Builder) {
         let build = builder.build;
         let stage = self.stage;
-        let target = self.target;
+        let target = &self.target;
         println!("Documenting stage{} test ({})", stage, target);
         let out = build.doc_out(target);
         t!(fs::create_dir_all(&out));
         let compiler = builder.compiler(stage, &build.build);
-        let compiler = if build.force_use_stage1(compiler, target) {
-            builder.compiler(1, compiler.host)
+        let compiler = &if build.force_use_stage1(&compiler, target) {
+            builder.compiler(1, &compiler.host)
         } else {
             compiler
         };
 
         // Build libstd docs so that we generate relative links
-        builder.ensure(Std { stage, target });
+        builder.ensure(Std { stage, target: target.to_owned() });
 
-        builder.ensure(compile::Test { compiler, target });
+        builder.ensure(compile::Test { compiler: compiler.to_owned(), target: target.to_owned() });
         let out_dir = build.stage_out(compiler, Mode::Libtest)
                            .join(target).join("doc");
         let rustdoc = builder.rustdoc(compiler);
@@ -639,13 +639,13 @@ impl<'a> Step<'a> for Test<'a> {
 // }
 //
 
-#[derive(Serialize)]
-pub struct Rustc<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Rustc {
     stage: u32,
-    target: &'a str,
+    target: String,
 }
 
-impl<'a> Step<'a> for Rustc<'a> {
+impl Step for Rustc {
     type Output = ();
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
@@ -660,7 +660,7 @@ impl<'a> Step<'a> for Rustc<'a> {
         let run = || {
             builder.ensure(Rustc {
                 stage: builder.top_stage,
-                target
+                target: target.to_owned(),
             });
         };
 
@@ -684,21 +684,21 @@ impl<'a> Step<'a> for Rustc<'a> {
     fn run(self, builder: &Builder) {
         let build = builder.build;
         let stage = self.stage;
-        let target = self.target;
+        let target = &self.target;
         println!("Documenting stage{} compiler ({})", stage, target);
         let out = build.doc_out(target);
         t!(fs::create_dir_all(&out));
         let compiler = builder.compiler(stage, &build.build);
-        let compiler = if build.force_use_stage1(compiler, target) {
-            builder.compiler(1, compiler.host)
+        let compiler = &if build.force_use_stage1(&compiler, target) {
+            builder.compiler(1, &compiler.host)
         } else {
             compiler
         };
 
         // Build libstd docs so that we generate relative links
-        builder.ensure(Std { stage, target });
+        builder.ensure(Std { stage, target: target.to_owned() });
 
-        builder.ensure(compile::Rustc { compiler, target });
+        builder.ensure(compile::Rustc { compiler: compiler.to_owned(), target: target.to_owned() });
         let out_dir = build.stage_out(compiler, Mode::Librustc)
                            .join(target).join("doc");
         let rustdoc = builder.rustdoc(compiler);
@@ -740,12 +740,12 @@ impl<'a> Step<'a> for Rustc<'a> {
 //      .host(true)
 //      .run(move |s| doc::error_index(build, s.target));
 
-#[derive(Serialize)]
-pub struct ErrorIndex<'a> {
-    target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ErrorIndex {
+    target: String,
 }
 
-impl<'a> Step<'a> for ErrorIndex<'a> {
+impl Step for ErrorIndex {
     type Output = ();
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
@@ -761,7 +761,7 @@ impl<'a> Step<'a> for ErrorIndex<'a> {
         }
 
         builder.ensure(ErrorIndex {
-            target,
+            target: target.to_owned(),
         });
     }
 
@@ -769,11 +769,11 @@ impl<'a> Step<'a> for ErrorIndex<'a> {
     /// `error_index_generator` tool.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
 
         builder.ensure(compile::Rustc {
             compiler: builder.compiler(0, &build.build),
-            target,
+            target: target.to_owned(),
         });
 
         println!("Documenting error index ({})", target);
@@ -802,12 +802,12 @@ impl<'a> Step<'a> for ErrorIndex<'a> {
 //      .host(true)
 //      .run(move |s| doc::unstable_book_gen(build, s.target));
 
-#[derive(Serialize)]
-pub struct UnstableBookGen<'a> {
-    target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct UnstableBookGen {
+    target: String,
 }
 
-impl<'a> Step<'a> for UnstableBookGen<'a> {
+impl Step for UnstableBookGen {
     type Output = ();
     const DEFAULT: bool = true;
     const ONLY_HOSTS: bool = true;
@@ -823,21 +823,21 @@ impl<'a> Step<'a> for UnstableBookGen<'a> {
         }
 
         builder.ensure(UnstableBookGen {
-            target,
+            target: target.to_owned(),
         });
     }
 
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
+        let target = &self.target;
 
         builder.ensure(compile::Std {
             compiler: builder.compiler(builder.top_stage, &build.build),
-            target,
+            target: target.to_owned(),
         });
 
         println!("Generating unstable book md files ({})", target);
-        let out = build.md_doc_out(target).join("unstable-book");
+        let out = build.md_doc_out(&target).join("unstable-book");
         t!(fs::create_dir_all(&out));
         t!(fs::remove_dir_all(&out));
         let mut cmd = builder.tool_cmd(Tool::UnstableBookGen);

@@ -140,13 +140,13 @@ use builder::{Step, Builder};
 //             .dep(move |s| s.name("rustc").host(&build.build).target(s.host))
 //             .run(move |s| compile::std(build, s.target, &s.compiler()));
 //    }
-#[derive(Serialize)]
-pub struct Std<'a> {
-    pub target: &'a str,
-    pub compiler: Compiler<'a>,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Std {
+    pub target: String,
+    pub compiler: Compiler,
 }
 
-impl<'a> Step<'a> for Std<'a> {
+impl Step for Std {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -160,7 +160,7 @@ impl<'a> Step<'a> for Std<'a> {
     fn make_run(builder: &Builder, _path: Option<&Path>, host: &str, target: &str) {
         builder.ensure(Std {
             compiler: builder.compiler(builder.top_stage, host),
-            target,
+            target: target.to_owned(),
         })
     }
 
@@ -171,22 +171,22 @@ impl<'a> Step<'a> for Std<'a> {
     /// created will also be linked into the sysroot directory.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
-        let compiler = self.compiler;
+        let target = &self.target;
+        let compiler = &self.compiler;
 
-        builder.ensure(StartupObjects { compiler, target });
+        builder.ensure(StartupObjects { compiler: compiler.to_owned(), target: target.to_owned() });
 
         if build.force_use_stage1(compiler, target) {
-            let from = builder.compiler(1, &build.build);
+            let from = &builder.compiler(1, &build.build);
             builder.ensure(Std {
-                compiler: from,
-                target: target,
+                compiler: from.to_owned(),
+                target: target.to_owned(),
             });
             println!("Uplifting stage1 std ({} -> {})", from.host, target);
             builder.ensure(StdLink {
-                compiler: from,
-                target_compiler: compiler,
-                target: target,
+                compiler: from.to_owned(),
+                target_compiler: compiler.to_owned(),
+                target: target.to_owned(),
             });
             return;
         }
@@ -245,8 +245,8 @@ impl<'a> Step<'a> for Std<'a> {
 
         builder.ensure(StdLink {
             compiler: builder.compiler(compiler.stage, &build.build),
-            target_compiler: compiler,
-            target: target,
+            target_compiler: compiler.to_owned(),
+            target: target.to_owned(),
         });
     }
 }
@@ -260,14 +260,14 @@ impl<'a> Step<'a> for Std<'a> {
 //     .dep(|s| s.name("startup-objects"))
 //     .dep(|s| s.name("create-sysroot").target(s.host));
 
-#[derive(Serialize)]
-struct StdLink<'a> {
-    pub compiler: Compiler<'a>,
-    pub target_compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct StdLink {
+    pub compiler: Compiler,
+    pub target_compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for StdLink<'a> {
+impl Step for StdLink {
     type Output = ();
 
     /// Link all libstd rlibs/dylibs into the sysroot location.
@@ -280,9 +280,9 @@ impl<'a> Step<'a> for StdLink<'a> {
     /// output directory.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
-        let target = self.target;
+        let compiler = &self.compiler;
+        let target_compiler = &self.target_compiler;
+        let target = &self.target;
         println!("Copying stage{} std from stage{} ({} -> {} / {})",
                 target_compiler.stage,
                 compiler.stage,
@@ -330,13 +330,13 @@ fn copy_apple_sanitizer_dylibs(native_dir: &Path, platform: &str, into: &Path) {
 //      .dep(|s| s.name("create-sysroot").target(s.host))
 //      .run(move |s| compile::build_startup_objects(build, &s.compiler(), s.target));
 
-#[derive(Serialize)]
-pub struct StartupObjects<'a> {
-    pub compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StartupObjects {
+    pub compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for StartupObjects<'a> {
+impl Step for StartupObjects {
     type Output = ();
 
     fn should_run(_builder: &Builder, path: &Path) -> bool {
@@ -346,7 +346,7 @@ impl<'a> Step<'a> for StartupObjects<'a> {
     fn make_run(builder: &Builder, _path: Option<&Path>, host: &str, target: &str) {
         builder.ensure(StartupObjects {
             compiler: builder.compiler(builder.top_stage, host),
-            target,
+            target: target.to_owned(),
         })
     }
 
@@ -358,8 +358,8 @@ impl<'a> Step<'a> for StartupObjects<'a> {
     /// no other compilers are guaranteed to be available).
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let for_compiler = self.compiler;
-        let target = self.target;
+        let for_compiler = &self.compiler;
+        let target = &self.target;
         if !target.contains("pc-windows-gnu") {
             return
         }
@@ -396,13 +396,13 @@ impl<'a> Step<'a> for StartupObjects<'a> {
 //             .dep(|s| s.name("libstd-link"))
 //             .run(move |s| compile::test(build, s.target, &s.compiler()));
 //    }
-#[derive(Serialize)]
-pub struct Test<'a> {
-    pub compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Test {
+    pub compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Test<'a> {
+impl Step for Test {
     type Output = ();
     const DEFAULT: bool = true;
 
@@ -416,7 +416,7 @@ impl<'a> Step<'a> for Test<'a> {
     fn make_run(builder: &Builder, _path: Option<&Path>, host: &str, target: &str) {
         builder.ensure(Test {
             compiler: builder.compiler(builder.top_stage, host),
-            target,
+            target: target.to_owned(),
         })
     }
 
@@ -427,21 +427,21 @@ impl<'a> Step<'a> for Test<'a> {
     /// artifacts created will also be linked into the sysroot directory.
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let target = self.target;
-        let compiler = self.compiler;
+        let target = &self.target;
+        let compiler = &self.compiler;
 
-        builder.ensure(Std { compiler, target });
+        builder.ensure(Std { compiler: compiler.to_owned(), target: target.to_owned() });
 
         if build.force_use_stage1(compiler, target) {
             builder.ensure(Test {
                 compiler: builder.compiler(1, &build.build),
-                target: target,
+                target: target.to_owned(),
             });
             println!("Uplifting stage1 test ({} -> {})", &build.build, target);
             builder.ensure(TestLink {
                 compiler: builder.compiler(1, &build.build),
-                target_compiler: compiler,
-                target: target,
+                target_compiler: compiler.to_owned(),
+                target: target.to_owned(),
             });
             return;
         }
@@ -463,8 +463,8 @@ impl<'a> Step<'a> for Test<'a> {
 
         builder.ensure(TestLink {
             compiler: builder.compiler(compiler.stage, &build.build),
-            target_compiler: compiler,
-            target: target,
+            target_compiler: compiler.to_owned(),
+            target: target.to_owned(),
         });
     }
 }
@@ -477,22 +477,22 @@ impl<'a> Step<'a> for Test<'a> {
 //            compile::test_link)
 //     .dep(|s| s.name("libstd-link"));
 
-#[derive(Serialize)]
-pub struct TestLink<'a> {
-    pub compiler: Compiler<'a>,
-    pub target_compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct TestLink {
+    pub compiler: Compiler,
+    pub target_compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for TestLink<'a> {
+impl Step for TestLink {
     type Output = ();
 
     /// Same as `std_link`, only for libtest
     fn run(self, builder: &Builder) {
         let build = builder.build;
-        let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
-        let target = self.target;
+        let compiler = &self.compiler;
+        let target_compiler = &self.target_compiler;
+        let target = &self.target;
         println!("Copying stage{} test from stage{} ({} -> {} / {})",
                 target_compiler.stage,
                 compiler.stage,
@@ -512,13 +512,13 @@ impl<'a> Step<'a> for TestLink<'a> {
 //             .run(move |s| compile::rustc(build, s.target, &s.compiler()));
 //    }
 
-#[derive(Serialize)]
-pub struct Rustc<'a> {
-    pub compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Rustc {
+    pub compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for Rustc<'a> {
+impl Step for Rustc {
     type Output = ();
     const ONLY_HOSTS: bool = true;
     const DEFAULT: bool = true;
@@ -533,7 +533,7 @@ impl<'a> Step<'a> for Rustc<'a> {
     fn make_run(builder: &Builder, _path: Option<&Path>, host: &str, target: &str) {
         builder.ensure(Rustc {
             compiler: builder.compiler(builder.top_stage, host),
-            target,
+            target: target.to_owned(),
         })
     }
 
@@ -543,26 +543,26 @@ impl<'a> Step<'a> for Rustc<'a> {
     /// the `compiler` targeting the `target` architecture. The artifacts
     /// created will also be linked into the sysroot directory.
     fn run(self, builder: &Builder) {
-        let build = builder.build;
-        let compiler = self.compiler;
-        let target = self.target;
+        let build = &builder.build;
+        let compiler = &self.compiler;
+        let target = &self.target;
 
-        builder.ensure(Test { compiler, target });
+        builder.ensure(Test { compiler: compiler.to_owned(), target: target.to_owned() });
 
         // Build LLVM for our target. This will implicitly build the host LLVM
         // if necessary.
-        builder.ensure(native::Llvm { target });
+        builder.ensure(native::Llvm { target: target.to_owned() });
 
         if build.force_use_stage1(compiler, target) {
             builder.ensure(Rustc {
                 compiler: builder.compiler(1, &build.build),
-                target: target,
+                target: target.to_owned(),
             });
             println!("Uplifting stage1 rustc ({} -> {})", &build.build, target);
             builder.ensure(RustcLink {
                 compiler: builder.compiler(1, &build.build),
-                target_compiler: compiler,
-                target,
+                target_compiler: compiler.to_owned(),
+                target: target.to_owned(),
             });
             return;
         }
@@ -570,7 +570,7 @@ impl<'a> Step<'a> for Rustc<'a> {
         // Ensure that build scripts have a std to link against.
         builder.ensure(Std {
             compiler: builder.compiler(self.compiler.stage, &build.build),
-            target: &build.build,
+            target: build.build.clone(),
         });
 
         let _folder = build.fold_output(|| format!("stage{}-rustc", compiler.stage));
@@ -648,8 +648,8 @@ impl<'a> Step<'a> for Rustc<'a> {
 
         builder.ensure(RustcLink {
             compiler: builder.compiler(compiler.stage, &build.build),
-            target_compiler: compiler,
-            target,
+            target_compiler: compiler.to_owned(),
+            target: target.to_owned(),
         });
     }
 }
@@ -660,22 +660,22 @@ impl<'a> Step<'a> for Rustc<'a> {
 //            "build-crate-rustc-main",
 //            compile::rustc_link)
 //     .dep(|s| s.name("libtest-link"));
-#[derive(Serialize)]
-struct RustcLink<'a> {
-    pub compiler: Compiler<'a>,
-    pub target_compiler: Compiler<'a>,
-    pub target: &'a str,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct RustcLink {
+    pub compiler: Compiler,
+    pub target_compiler: Compiler,
+    pub target: String,
 }
 
-impl<'a> Step<'a> for RustcLink<'a> {
+impl Step for RustcLink {
     type Output = ();
 
     /// Same as `std_link`, only for librustc
     fn run(self, builder: &Builder) {
-        let build = builder.build;
-        let compiler = self.compiler;
-        let target_compiler = self.target_compiler;
-        let target = self.target;
+        let build = &builder.build;
+        let compiler = &self.compiler;
+        let target_compiler = &self.target_compiler;
+        let target = &self.target;
         println!("Copying stage{} rustc from stage{} ({} -> {} / {})",
                  target_compiler.stage,
                  compiler.stage,
@@ -689,19 +689,19 @@ impl<'a> Step<'a> for RustcLink<'a> {
 
 /// Cargo's output path for the standard library in a given stage, compiled
 /// by a particular compiler for the specified target.
-pub fn libstd_stamp(build: &Build, compiler: Compiler, target: &str) -> PathBuf {
+pub fn libstd_stamp(build: &Build, compiler: &Compiler, target: &str) -> PathBuf {
     build.cargo_out(compiler, Mode::Libstd, target).join(".libstd.stamp")
 }
 
 /// Cargo's output path for libtest in a given stage, compiled by a particular
 /// compiler for the specified target.
-pub fn libtest_stamp(build: &Build, compiler: Compiler, target: &str) -> PathBuf {
+pub fn libtest_stamp(build: &Build, compiler: &Compiler, target: &str) -> PathBuf {
     build.cargo_out(compiler, Mode::Libtest, target).join(".libtest.stamp")
 }
 
 /// Cargo's output path for librustc in a given stage, compiled by a particular
 /// compiler for the specified target.
-pub fn librustc_stamp(build: &Build, compiler: Compiler, target: &str) -> PathBuf {
+pub fn librustc_stamp(build: &Build, compiler: &Compiler, target: &str) -> PathBuf {
     build.cargo_out(compiler, Mode::Librustc, target).join(".librustc.stamp")
 }
 
@@ -714,12 +714,12 @@ fn compiler_file(compiler: &Path, file: &str) -> PathBuf {
 // rules.build("create-sysroot", "path/to/nowhere")
 //      .run(move |s| compile::create_sysroot(build, &s.compiler()));
 
-#[derive(Serialize)]
-pub struct Sysroot<'a> {
-    pub compiler: Compiler<'a>,
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Sysroot {
+    pub compiler: Compiler,
 }
 
-impl<'a> Step<'a> for Sysroot<'a> {
+impl Step for Sysroot {
     type Output = PathBuf;
 
     /// Returns the sysroot for the `compiler` specified that *this build system
@@ -756,36 +756,36 @@ impl<'a> Step<'a> for Sysroot<'a> {
 //      })
 //      .run(move |s| compile::assemble_rustc(build, s.stage, s.target));
 
-#[derive(Serialize)]
-pub struct Assemble<'a> {
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Assemble {
     /// The compiler which we will produce in this step. Assemble itself will
     /// take care of ensuring that the necessary prerequisites to do so exist,
     /// that is, this target can be a stage2 compiler and Assemble will build
     /// previous stages for you.
-    pub target_compiler: Compiler<'a>,
+    pub target_compiler: Compiler,
 }
 
-impl<'a> Step<'a> for Assemble<'a> {
-    type Output = Compiler<'a>;
+impl Step for Assemble {
+    type Output = Compiler;
 
     /// Prepare a new compiler from the artifacts in `stage`
     ///
     /// This will assemble a compiler in `build/$host/stage$stage`. The compiler
     /// must have been previously produced by the `stage - 1` build.build
     /// compiler.
-    fn run(self, builder: &Builder) -> Compiler<'a> {
+    fn run(self, builder: &Builder) -> Compiler {
         let build = builder.build;
-        let target_compiler = self.target_compiler;
+        let target_compiler = &self.target_compiler;
 
         if target_compiler.stage == 0 {
             assert_eq!(build.build, target_compiler.host,
                 "Cannot obtain compiler for non-native build triple at stage 0");
             // The stage 0 compiler for the build triple is always pre-built.
-            return target_compiler;
+            return target_compiler.to_owned()
         }
 
         // Get the compiler that we'll use to bootstrap ourselves.
-        let build_compiler = if target_compiler.host != build.build {
+        let build_compiler = &if target_compiler.host != build.build {
             // Build a compiler for the host platform. We cannot use the stage0
             // compiler for the host platform for this because it doesn't have
             // the libraries we need.  FIXME: Perhaps we should download those
@@ -796,14 +796,14 @@ impl<'a> Step<'a> for Assemble<'a> {
                     // compiler and then use that to bootstrap this compiler
                     // forward.
                     stage: target_compiler.stage - 1,
-                    host: &build.build
+                    host: build.build.clone()
                 },
             })
         } else {
             // Build the compiler we'll use to build the stage requested. This
             // may build more than one compiler (going down to stage 0).
             builder.ensure(Assemble {
-                target_compiler: target_compiler.with_stage(target_compiler.stage - 1),
+                target_compiler: target_compiler.to_owned().with_stage(target_compiler.stage - 1),
             })
         };
 
@@ -812,10 +812,10 @@ impl<'a> Step<'a> for Assemble<'a> {
         // link to these. (FIXME: Is that correct? It seems to be correct most
         // of the time but I think we do link to these for stage2/bin compilers
         // when not performing a full bootstrap).
-        builder.ensure(Rustc { compiler: build_compiler, target: target_compiler.host });
+        builder.ensure(Rustc { compiler: build_compiler.to_owned(), target: target_compiler.host.clone() });
 
         let stage = target_compiler.stage;
-        let host = target_compiler.host;
+        let host = &target_compiler.host;
         println!("Assembling stage{} compiler ({})", stage, host);
 
         // Link in all dylibs to the libdir
@@ -849,7 +849,7 @@ impl<'a> Step<'a> for Assemble<'a> {
             copy(&rustdoc_src, &rustdoc_dst);
         }
 
-        target_compiler
+        target_compiler.to_owned()
     }
 }
 

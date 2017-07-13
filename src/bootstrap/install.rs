@@ -127,14 +127,14 @@ macro_rules! install {
        $default_cond:expr,
        only_hosts: $only_hosts:expr,
        $run_item:block $(, $c:ident)*;)+) => {
-        $(#[derive(Serialize)]
-        pub struct $name<'a> {
+        $(#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+        pub struct $name {
             pub stage: u32,
-            pub target: &'a str,
-            pub host: &'a str,
+            pub target: String,
+            pub host: String,
         }
 
-        impl<'a> Step<'a> for $name<'a> {
+        impl Step for $name {
             type Output = ();
             const DEFAULT: bool = true;
             const ONLY_BUILD_TARGETS: bool = true;
@@ -151,8 +151,8 @@ macro_rules! install {
                 }
                 $builder.ensure($name {
                     stage: $builder.top_stage,
-                    target,
-                    host,
+                    target: target.to_owned(),
+                    host: host.to_owned(),
                 });
             }
 
@@ -170,8 +170,8 @@ install!((self, builder),
     //      .dep(|s| s.name("dist-docs"))
     //      .run(move |s| install::Installer::new(build).install_docs(s.stage, s.target));
     Docs, "src/doc", builder.build.config.docs, only_hosts: false, {
-        builder.ensure(dist::Docs { stage: self.stage, target: self.target });
-        install_docs(builder, self.stage, self.target);
+        builder.ensure(dist::Docs { stage: self.stage, target: self.target.clone() });
+        install_docs(builder, self.stage, &self.target);
     };
     // rules.install("install-std", "src/libstd")
     //      .default(true)
@@ -180,8 +180,8 @@ install!((self, builder),
     //      .run(move |s| install::Installer::new(build).install_std(s.stage));
     Std, "src/libstd", true, only_hosts: true, {
         builder.ensure(dist::Std {
-            compiler: builder.compiler(self.stage, self.host),
-            target: self.target
+            compiler: builder.compiler(self.stage, &self.host),
+            target: self.target.clone()
         });
         install_std(builder, self.stage);
     };
@@ -192,8 +192,8 @@ install!((self, builder),
     //      .dep(|s| s.name("dist-cargo"))
     //      .run(move |s| install::Installer::new(build).install_cargo(s.stage, s.target));
     Cargo, "cargo", builder.build.config.extended, only_hosts: true, {
-        builder.ensure(dist::Cargo { stage: self.stage, target: self.target });
-        install_cargo(builder, self.stage, self.target);
+        builder.ensure(dist::Cargo { stage: self.stage, target: self.target.clone() });
+        install_cargo(builder, self.stage, &self.target);
     };
     // rules.install("install-rls", "rls")
     //      .default(build.config.extended)
@@ -202,8 +202,8 @@ install!((self, builder),
     //      .dep(|s| s.name("dist-rls"))
     //      .run(move |s| install::Installer::new(build).install_rls(s.stage, s.target));
     Rls, "rls", builder.build.config.extended, only_hosts: true, {
-        builder.ensure(dist::Rls { stage: self.stage, target: self.target });
-        install_rls(builder, self.stage, self.target);
+        builder.ensure(dist::Rls { stage: self.stage, target: self.target.clone() });
+        install_rls(builder, self.stage, &self.target);
     };
     // rules.install("install-analysis", "analysis")
     //      .default(build.config.extended)
@@ -212,10 +212,10 @@ install!((self, builder),
     //      .run(move |s| install::Installer::new(build).install_analysis(s.stage, s.target));
     Analysis, "analysis", builder.build.config.extended, only_hosts: false, {
         builder.ensure(dist::Analysis {
-            compiler: builder.compiler(self.stage, self.host),
-            target: self.target
+            compiler: builder.compiler(self.stage, &self.host),
+            target: self.target.clone()
         });
-        install_analysis(builder, self.stage, self.target);
+        install_analysis(builder, self.stage, &self.target);
     };
     // rules.install("install-src", "src")
     //      .default(build.config.extended)
@@ -235,7 +235,7 @@ install!((self, builder),
     //      .dep(|s| s.name("dist-rustc"))
     //      .run(move |s| install::Installer::new(build).install_rustc(s.stage, s.target));
     Rustc, "src/librustc", builder.build.config.extended, only_hosts: true, {
-        builder.ensure(dist::Rustc { stage: self.stage, target: self.target });
-        install_rustc(builder, self.stage, self.target);
+        builder.ensure(dist::Rustc { stage: self.stage, target: self.target.clone() });
+        install_rustc(builder, self.stage, &self.target);
     };
 );

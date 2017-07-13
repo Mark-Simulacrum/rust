@@ -116,7 +116,6 @@
 #![deny(warnings)]
 #![allow(stable_features)]
 #![feature(associated_consts)]
-#![feature(core_intrinsics)]
 
 #[macro_use]
 extern crate build_helper;
@@ -193,10 +192,10 @@ pub use flags::{Flags, Subcommand};
 /// Each compiler has a `stage` that it is associated with and a `host` that
 /// corresponds to the platform the compiler runs on. This structure is used as
 /// a parameter to many methods below.
-#[derive(Serialize, Deserialize, Eq, PartialEq, Clone, Copy, Hash, Debug)]
-pub struct Compiler<'a> {
+#[derive(Eq, PartialEq, Clone, Hash, Debug)]
+pub struct Compiler {
     stage: u32,
-    host: &'a str,
+    host: String,
 }
 
 /// Global configuration for the build system.
@@ -266,7 +265,7 @@ struct Crate {
 ///
 /// These entries currently correspond to the various output directories of the
 /// build system, with each mod generating output in a different directory.
-#[derive(Serialize, Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Mode {
     /// Build the standard library, placing output in the "stageN-std" directory.
     Libstd,
@@ -438,32 +437,32 @@ impl Build {
 
     /// Get the directory for incremental by-products when using the
     /// given compiler.
-    fn incremental_dir(&self, compiler: Compiler) -> PathBuf {
-        self.out.join(compiler.host).join(format!("stage{}-incremental", compiler.stage))
+    fn incremental_dir(&self, compiler: &Compiler) -> PathBuf {
+        self.out.join(compiler.host.clone()).join(format!("stage{}-incremental", compiler.stage))
     }
 
     /// Returns the root directory for all output generated in a particular
     /// stage when running with a particular host compiler.
     ///
     /// The mode indicates what the root directory is for.
-    fn stage_out(&self, compiler: Compiler, mode: Mode) -> PathBuf {
+    fn stage_out(&self, compiler: &Compiler, mode: Mode) -> PathBuf {
         let suffix = match mode {
             Mode::Libstd => "-std",
             Mode::Libtest => "-test",
             Mode::Tool => "-tools",
             Mode::Librustc => "-rustc",
         };
-        self.out.join(compiler.host)
+        self.out.join(compiler.host.clone())
                 .join(format!("stage{}{}", compiler.stage, suffix))
     }
 
     /// Returns the root output directory for all Cargo output in a given stage,
     /// running a particular compiler, wehther or not we're building the
     /// standard library, and targeting the specified architecture.
-    fn cargo_out(&self,
-                 compiler: Compiler,
-                 mode: Mode,
-                 target: &str) -> PathBuf {
+    fn cargo_out<P: AsRef<Path>>(&self,
+                                 compiler: &Compiler,
+                                 mode: Mode,
+                                 target: P) -> PathBuf {
         self.stage_out(compiler, mode).join(target).join(self.cargo_dir())
     }
 
@@ -718,7 +717,7 @@ impl Build {
     ///
     /// When all of these conditions are met the build will lift artifacts from
     /// the previous stage forward.
-    fn force_use_stage1(&self, compiler: Compiler, target: &str) -> bool {
+    fn force_use_stage1(&self, compiler: &Compiler, target: &str) -> bool {
         !self.config.full_bootstrap &&
             compiler.stage >= 2 &&
             self.config.host.iter().any(|h| h == target)
@@ -861,8 +860,9 @@ impl Build {
     }
 }
 
-impl<'a> Compiler<'a> {
-    pub fn with_stage(mut self, stage: u32) -> Compiler<'a> {
+// TODO: not identified as removable
+impl<'a> Compiler {
+    pub fn with_stage(mut self, stage: u32) -> Compiler {
         self.stage = stage;
         self
     }

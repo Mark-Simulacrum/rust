@@ -1,0 +1,5 @@
+builder.rs  cache.rs  check.rs  compile.rs  dist.rs  doc.rs  install.rs  lib.rs  native.rs  tool.rs
+
+some of the macro generated stuff should be static strings but they can't because of deserialize...
+why do some things not implement make_run
+doc.rs shorthand Rustdoc struct, and other places
