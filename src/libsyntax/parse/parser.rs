@@ -401,7 +401,7 @@ crate enum TokenType {
 impl TokenType {
     crate fn to_string(&self) -> String {
         match *self {
-            TokenType::Token(ref t) => format!("`{}`", pprust::token_kind_to_string(t)),
+            TokenType::Token(ref t) => format!("`{}`", t),
             TokenType::Keyword(kw) => format!("`{}`", kw),
             TokenType::Operator => "an operator".to_string(),
             TokenType::Lifetime => "lifetime".to_string(),
@@ -536,7 +536,7 @@ impl<'a> Parser<'a> {
 
     /// Converts the current token to a string using `self`'s reader.
     pub fn this_token_to_string(&self) -> String {
-        pprust::token_to_string(&self.token)
+        self.token.to_string()
     }
 
     crate fn token_descr(&self) -> Option<&'static str> {
@@ -2872,7 +2872,7 @@ impl<'a> Parser<'a> {
                 // For example: `if let Some(x) = x { x } else { 0 } / 2`
                 let mut err = self.sess.span_diagnostic.struct_span_err(self.token.span, &format!(
                     "expected expression, found `{}`",
-                    pprust::token_to_string(&self.token),
+                    self.token,
                 ));
                 err.span_label(self.token.span, "expected expression");
                 self.sess.expr_parentheses_needed(
@@ -7881,7 +7881,7 @@ pub fn emit_unclosed_delims(unclosed_delims: &mut Vec<UnmatchedBrace>, handler: 
     for unmatched in unclosed_delims.iter() {
         let mut err = handler.struct_span_err(unmatched.found_span, &format!(
             "incorrect close delimiter: `{}`",
-            pprust::token_kind_to_string(&token::CloseDelim(unmatched.found_delim)),
+            token::CloseDelim(unmatched.found_delim),
         ));
         err.span_label(unmatched.found_span, "incorrect close delimiter");
         if let Some(sp) = unmatched.candidate_span {

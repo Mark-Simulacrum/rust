@@ -35,6 +35,23 @@ pub enum BinOpToken {
     Shr,
 }
 
+impl BinOpToken {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Plus     => "+",
+            Minus    => "-",
+            Star     => "*",
+            Slash    => "/",
+            Percent  => "%",
+            Caret    => "^",
+            And      => "&",
+            Or       => "|",
+            Shl      => "<<",
+            Shr      => ">>",
+        }
+    }
+}
+
 /// A delimiter token.
 #[derive(Clone, PartialEq, RustcEncodable, RustcDecodable, Hash, Debug, Copy)]
 pub enum DelimToken {
@@ -231,6 +248,69 @@ pub enum TokenKind {
     Eof,
 }
 
+impl fmt::Display for TokenKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match *self {
+            Eq                   => write!(f, "="),
+            Lt                   => write!(f, "<"),
+            Le                   => write!(f, "<="),
+            EqEq                 => write!(f, "=="),
+            Ne                   => write!(f, "!="),
+            Ge                   => write!(f, ">="),
+            Gt                   => write!(f, ">"),
+            Not                  => write!(f, "!"),
+            Tilde                => write!(f, "~"),
+            OrOr                 => write!(f, "||"),
+            AndAnd               => write!(f, "&&"),
+            BinOp(op)            => write!(f, "{}", op.as_str()),
+            BinOpEq(op)          => write!(f, "={}", op.as_str()),
+
+            /* Structural symbols */
+            At                   => write!(f, "@"),
+            Dot                  => write!(f, "."),
+            DotDot               => write!(f, ".."),
+            DotDotDot            => write!(f, "..."),
+            DotDotEq             => write!(f, "..="),
+            Comma                => write!(f, ","),
+            Semi                 => write!(f, ";"),
+            Colon                => write!(f, ":"),
+            ModSep               => write!(f, "::"),
+            RArrow               => write!(f, "->"),
+            LArrow               => write!(f, "<-"),
+            FatArrow             => write!(f, "=>"),
+            OpenDelim(Paren) => write!(f, "("),
+            CloseDelim(Paren) => write!(f, ")"),
+            OpenDelim(Bracket) => write!(f, "["),
+            CloseDelim(Bracket) => write!(f, "]"),
+            OpenDelim(Brace) => write!(f, "{{"),
+            CloseDelim(Brace) => write!(f, "}}"),
+            OpenDelim(NoDelim) |
+            CloseDelim(NoDelim) => write!(f, " "),
+            Pound                => write!(f, "#"),
+            Dollar               => write!(f, "$"),
+            Question             => write!(f, "?"),
+            SingleQuote          => write!(f, "'"),
+
+            /* Literals */
+            Literal(lit) => write!(f, "{}", pprust::literal_to_string(lit)),
+
+            /* Name components */
+            Ident(s, false)      => write!(f, "{}", s),
+            Ident(s, true)       => write!(f, "r#{}", s),
+            Lifetime(s)          => write!(f, "{}", s),
+
+            /* Other */
+            DocComment(s)        => write!(f, "{}", s),
+            Eof                  => write!(f, "<eof>"),
+            Whitespace           => write!(f, " "),
+            Comment              => write!(f, "/* */"),
+            Shebang(s)           => write!(f, "/* shebang: {}*/", s),
+
+            Interpolated(ref nt) => write!(f, "{}", pprust::nonterminal_to_string(nt)),
+        }
+    }
+}
+
 // `TokenKind` is used a lot. Make sure it doesn't unintentionally get bigger.
 #[cfg(target_arch = "x86_64")]
 static_assert_size!(TokenKind, 16);
@@ -239,6 +319,12 @@ static_assert_size!(TokenKind, 16);
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.kind)
+    }
 }
 
 impl TokenKind {

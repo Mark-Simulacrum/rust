@@ -9,7 +9,6 @@ use crate::parse::parser::emit_unclosed_delims;
 use crate::parse::token::TokenKind;
 use crate::tokenstream::{TokenStream, TokenTree};
 use crate::diagnostics::plugin::ErrorMap;
-use crate::print::pprust;
 
 use errors::{Applicability, FatalError, Level, Handler, ColorConfig, Diagnostic, DiagnosticBuilder};
 use rustc_data_structures::sync::{Lrc, Lock};
@@ -317,7 +316,7 @@ pub fn maybe_file_to_stream(
             for unmatched in unmatched_braces {
                 let mut db = sess.span_diagnostic.struct_span_err(unmatched.found_span, &format!(
                     "incorrect close delimiter: `{}`",
-                    pprust::token_kind_to_string(&token::CloseDelim(unmatched.found_delim)),
+                    token::CloseDelim(unmatched.found_delim),
                 ));
                 db.span_label(unmatched.found_span, "incorrect close delimiter");
                 if let Some(sp) = unmatched.candidate_span {

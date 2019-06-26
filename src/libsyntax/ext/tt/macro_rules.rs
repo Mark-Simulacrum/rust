@@ -1200,7 +1200,7 @@ fn is_legal_fragment_specifier(
 
 fn quoted_tt_to_string(tt: &quoted::TokenTree) -> String {
     match *tt {
-        quoted::TokenTree::Token(ref token) => crate::print::pprust::token_to_string(&token),
+        quoted::TokenTree::Token(ref token) => token.to_string(),
         quoted::TokenTree::MetaVar(_, name) => format!("${}", name),
         quoted::TokenTree::MetaVarDecl(_, name, kind) => format!("${}:{}", name, kind),
         _ => panic!(

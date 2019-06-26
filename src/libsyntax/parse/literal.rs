@@ -320,7 +320,7 @@ impl<'a> Parser<'a> {
                     .span_suggestion(
                         token.span,
                         "must have an integer part",
-                        pprust::token_to_string(token),
+                        token.to_string(),
                         Applicability::MachineApplicable,
                     )
                     .emit();

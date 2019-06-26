@@ -1,6 +1,5 @@
 use syntax_pos::Span;
 
-use crate::print::pprust::token_to_string;
 use crate::parse::lexer::{StringReader, UnmatchedBrace};
 use crate::parse::token::{self, Token};
 use crate::parse::PResult;
@@ -194,8 +193,7 @@ impl<'a> TokenTreesReader<'a> {
             token::CloseDelim(_) => {
                 // An unexpected closing delimiter (i.e., there is no
                 // matching opening delimiter).
-                let token_str = token_to_string(&self.token);
-                let msg = format!("unexpected close delimiter: `{}`", token_str);
+                let msg = format!("unexpected close delimiter: `{}`", self.token);
                 let mut err = self.string_reader.sess.span_diagnostic
                     .struct_span_err(self.token.span, &msg);
                 err.span_label(self.token.span, "unexpected close delimiter");

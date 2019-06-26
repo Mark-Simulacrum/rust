@@ -6,7 +6,7 @@ use crate::ast::{Attribute, MacDelimiter, GenericArg};
 use crate::util::parser::{self, AssocOp, Fixity};
 use crate::attr;
 use crate::source_map::{self, SourceMap, Spanned};
-use crate::parse::token::{self, BinOpToken, Nonterminal, Token, TokenKind};
+use crate::parse::token::{self, Nonterminal};
 use crate::parse::lexer::comments;
 use crate::parse::{self, ParseSess};
 use crate::print::pp::{self, Breaks};
@@ -140,21 +140,6 @@ pub fn to_string<F>(f: F) -> String where
     wr
 }
 
-fn binop_to_string(op: BinOpToken) -> &'static str {
-    match op {
-        token::Plus     => "+",
-        token::Minus    => "-",
-        token::Star     => "*",
-        token::Slash    => "/",
-        token::Percent  => "%",
-        token::Caret    => "^",
-        token::And      => "&",
-        token::Or       => "|",
-        token::Shl      => "<<",
-        token::Shr      => ">>",
-    }
-}
-
 pub fn literal_to_string(lit: token::Lit) -> String {
     let token::Lit { kind, symbol, suffix } = lit;
     let mut out = match kind {
@@ -179,71 +164,6 @@ pub fn literal_to_string(lit: token::Lit) -> String {
     }
 
     out
-}
-
-pub fn token_kind_to_string(tok: &TokenKind) -> String {
-    match *tok {
-        token::Eq                   => "=".to_string(),
-        token::Lt                   => "<".to_string(),
-        token::Le                   => "<=".to_string(),
-        token::EqEq                 => "==".to_string(),
-        token::Ne                   => "!=".to_string(),
-        token::Ge                   => ">=".to_string(),
-        token::Gt                   => ">".to_string(),
-        token::Not                  => "!".to_string(),
-        token::Tilde                => "~".to_string(),
-        token::OrOr                 => "||".to_string(),
-        token::AndAnd               => "&&".to_string(),
-        token::BinOp(op)            => binop_to_string(op).to_string(),
-        token::BinOpEq(op)          => format!("{}=", binop_to_string(op)),
-
-        /* Structural symbols */
-        token::At                   => "@".to_string(),
-        token::Dot                  => ".".to_string(),
-        token::DotDot               => "..".to_string(),
-        token::DotDotDot            => "...".to_string(),
-        token::DotDotEq             => "..=".to_string(),
-        token::Comma                => ",".to_string(),
-        token::Semi                 => ";".to_string(),
-        token::Colon                => ":".to_string(),
-        token::ModSep               => "::".to_string(),
-        token::RArrow               => "->".to_string(),
-        token::LArrow               => "<-".to_string(),
-        token::FatArrow             => "=>".to_string(),
-        token::OpenDelim(token::Paren) => "(".to_string(),
-        token::CloseDelim(token::Paren) => ")".to_string(),
-        token::OpenDelim(token::Bracket) => "[".to_string(),
-        token::CloseDelim(token::Bracket) => "]".to_string(),
-        token::OpenDelim(token::Brace) => "{".to_string(),
-        token::CloseDelim(token::Brace) => "}".to_string(),
-        token::OpenDelim(token::NoDelim) |
-        token::CloseDelim(token::NoDelim) => " ".to_string(),
-        token::Pound                => "#".to_string(),
-        token::Dollar               => "$".to_string(),
-        token::Question             => "?".to_string(),
-        token::SingleQuote          => "'".to_string(),
-
-        /* Literals */
-        token::Literal(lit) => literal_to_string(lit),
-
-        /* Name components */
-        token::Ident(s, false)      => s.to_string(),
-        token::Ident(s, true)       => format!("r#{}", s),
-        token::Lifetime(s)          => s.to_string(),
-
-        /* Other */
-        token::DocComment(s)        => s.to_string(),
-        token::Eof                  => "<eof>".to_string(),
-        token::Whitespace           => " ".to_string(),
-        token::Comment              => "/* */".to_string(),
-        token::Shebang(s)           => format!("/* shebang: {}*/", s),
-
-        token::Interpolated(ref nt) => nonterminal_to_string(nt),
-    }
-}
-
-pub fn token_to_string(token: &Token) -> String {
-    token_kind_to_string(&token.kind)
 }
 
 crate fn nonterminal_to_string(nt: &Nonterminal) -> String {
@@ -710,7 +630,7 @@ pub trait PrintState<'a> {
     fn print_tt(&mut self, tt: tokenstream::TokenTree) {
         match tt {
             TokenTree::Token(ref token) => {
-                self.writer().word(token_to_string(&token));
+                self.writer().word(token.to_string());
                 match token.kind {
                     token::DocComment(..) => {
                         self.writer().hardbreak()
@@ -719,11 +639,11 @@ pub trait PrintState<'a> {
                 }
             }
             TokenTree::Delimited(_, delim, tts) => {
-                self.writer().word(token_kind_to_string(&token::OpenDelim(delim)));
+                self.writer().word(token::OpenDelim(delim).to_string());
                 self.writer().space();
                 self.print_tts(tts);
                 self.writer().space();
-                self.writer().word(token_kind_to_string(&token::CloseDelim(delim)))
+                self.writer().word(token::CloseDelim(delim).to_string())
             },
         }
     }

@@ -739,7 +739,6 @@ impl<'a> Parser<'a> {
         &mut self,
         t: &TokenKind,
     ) -> PResult<'a, bool /* recovered */> {
-        let token_str = pprust::token_kind_to_string(t);
         let this_token_str = self.this_token_descr();
         let (prev_sp, sp) = match (&self.token.kind, self.subparser_name) {
             // Point at the end of the macro call when reaching end of macro arguments.
@@ -756,14 +755,14 @@ impl<'a> Parser<'a> {
         };
         let msg = format!(
             "expected `{}`, found {}",
-            token_str,
+            t,
             match (&self.token.kind, self.subparser_name) {
                 (token::Eof, Some(origin)) => format!("end of {}", origin),
                 _ => this_token_str,
             },
         );
         let mut err = self.struct_span_err(sp, &msg);
-        let label_exp = format!("expected `{}`", token_str);
+        let label_exp = format!("expected `{}`", t);
         match self.recover_closing_delimiter(&[t.clone()], err) {
             Err(e) => err = e,
             Ok(recovered) => {

@@ -4,7 +4,6 @@ use crate::ext::tt::macro_parser;
 use crate::feature_gate::Features;
 use crate::parse::token::{self, Token, TokenKind};
 use crate::parse::ParseSess;
-use crate::print::pprust;
 use crate::symbol::kw;
 use crate::tokenstream::{self, DelimSpan};
 
@@ -258,7 +257,7 @@ fn parse_tree(
             Some(tokenstream::TokenTree::Delimited(span, delim, tts)) => {
                 // Must have `(` not `{` or `[`
                 if delim != token::Paren {
-                    let tok = pprust::token_kind_to_string(&token::OpenDelim(delim));
+                    let tok = token::OpenDelim(delim);
                     let msg = format!("expected `(`, found `{}`", tok);
                     sess.span_diagnostic.span_err(span.entire(), &msg);
                 }
@@ -302,7 +301,7 @@ fn parse_tree(
             // `tree` is followed by a random token. This is an error.
             Some(tokenstream::TokenTree::Token(token)) => {
                 let msg =
-                    format!("expected identifier, found `{}`", pprust::token_to_string(&token),);
+                    format!("expected identifier, found `{}`", token);
                 sess.span_diagnostic.span_err(token.span, &msg);
                 TokenTree::MetaVar(token.span, ast::Ident::invalid())
             }

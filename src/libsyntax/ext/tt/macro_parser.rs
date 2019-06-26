@@ -79,7 +79,6 @@ use crate::ext::tt::quoted::{self, TokenTree};
 use crate::parse::{Directory, ParseSess};
 use crate::parse::parser::{Parser, PathStyle};
 use crate::parse::token::{self, DocComment, Nonterminal, Token};
-use crate::print::pprust;
 use crate::symbol::{kw, sym, Symbol};
 use crate::tokenstream::{DelimSpan, TokenStream};
 
@@ -420,10 +419,7 @@ fn nameize<I: Iterator<Item = NamedMatch>>(
 pub fn parse_failure_msg(tok: &Token) -> String {
     match tok.kind {
         token::Eof => "unexpected end of macro invocation".to_string(),
-        _ => format!(
-            "no rules expected the token `{}`",
-            pprust::token_to_string(tok)
-        ),
+        _ => format!("no rules expected the token `{}`", tok),
     }
 }
 
@@ -933,8 +929,7 @@ fn parse_nt<'a>(p: &mut Parser<'a>, sp: Span, name: Symbol) -> Nonterminal {
             p.bump();
             token::NtIdent(Ident::new(name, span), is_raw)
         } else {
-            let token_str = pprust::token_to_string(&p.token);
-            p.fatal(&format!("expected ident, found {}", &token_str)).emit();
+            p.fatal(&format!("expected ident, found {}", p.token)).emit();
             FatalError.raise()
         }
         sym::path => token::NtPath(panictry!(p.parse_path(PathStyle::Type))),
@@ -943,8 +938,7 @@ fn parse_nt<'a>(p: &mut Parser<'a>, sp: Span, name: Symbol) -> Nonterminal {
         sym::lifetime => if p.check_lifetime() {
             token::NtLifetime(p.expect_lifetime().ident)
         } else {
-            let token_str = pprust::token_to_string(&p.token);
-            p.fatal(&format!("expected a lifetime, found `{}`", &token_str)).emit();
+            p.fatal(&format!("expected a lifetime, found `{}`", p.token)).emit();
             FatalError.raise();
         }
         // this is not supposed to happen, since it has been checked
