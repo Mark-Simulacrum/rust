@@ -238,8 +238,12 @@ pub fn path_segment_to_string(p: &ast::PathSegment) -> String {
     to_string(|s| s.print_path_segment(p, false))
 }
 
-pub fn ident_to_string(id: ast::Ident) -> String {
-    to_string(|s| s.print_ident(id))
+fn ident_to_string(ident: ast::Ident) -> String {
+    if ident.is_raw_guess() {
+        format!("r#{}", ident)
+    } else {
+        ident.as_str().to_string()
+    }
 }
 
 pub fn vis_to_string(v: &ast::Visibility) -> String {
