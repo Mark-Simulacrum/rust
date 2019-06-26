@@ -140,32 +140,6 @@ pub fn to_string<F>(f: F) -> String where
     wr
 }
 
-pub fn literal_to_string(lit: token::Lit) -> String {
-    let token::Lit { kind, symbol, suffix } = lit;
-    let mut out = match kind {
-        token::Byte          => format!("b'{}'", symbol),
-        token::Char          => format!("'{}'", symbol),
-        token::Str           => format!("\"{}\"", symbol),
-        token::StrRaw(n)     => format!("r{delim}\"{string}\"{delim}",
-                                        delim="#".repeat(n as usize),
-                                        string=symbol),
-        token::ByteStr       => format!("b\"{}\"", symbol),
-        token::ByteStrRaw(n) => format!("br{delim}\"{string}\"{delim}",
-                                        delim="#".repeat(n as usize),
-                                        string=symbol),
-        token::Integer       |
-        token::Float         |
-        token::Bool          |
-        token::Err           => symbol.to_string(),
-    };
-
-    if let Some(suffix) = suffix {
-        out.push_str(&suffix.as_str())
-    }
-
-    out
-}
-
 crate fn nonterminal_to_string(nt: &Nonterminal) -> String {
     match *nt {
         token::NtExpr(ref e)        => expr_to_string(e),
@@ -306,10 +280,6 @@ pub fn meta_item_to_string(mi: &ast::MetaItem) -> String {
 
 pub fn attribute_to_string(attr: &ast::Attribute) -> String {
     to_string(|s| s.print_attribute(attr))
-}
-
-pub fn lit_to_string(l: &ast::Lit) -> String {
-    to_string(|s| s.print_literal(l))
 }
 
 pub fn variant_to_string(var: &ast::Variant) -> String {
@@ -479,7 +449,7 @@ pub trait PrintState<'a> {
 
     fn print_literal(&mut self, lit: &ast::Lit) {
         self.maybe_print_comment(lit.span.lo());
-        self.writer().word(literal_to_string(lit.token))
+        self.writer().word(lit.token.to_string())
     }
 
     fn print_string(&mut self, st: &str,
