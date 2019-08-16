@@ -217,30 +217,30 @@ fn run_test(
         _ => PathBuf::from(r"doctest.rs"),
     };
 
-    let input = config::Input::Str {
-        name: FileName::DocTest(path, line as isize - line_offset as isize),
-        input: test,
-    };
-    let outputs = OutputTypes::new(&[(OutputType::Exe, None)]);
+    //let input = config::Input::Str {
+    //    name: FileName::DocTest(path, line as isize - line_offset as isize),
+    //    input: test,
+    //};
+    //let outputs = OutputTypes::new(&[(OutputType::Exe, None)]);
 
-    let sessopts = config::Options {
-        maybe_sysroot,
-        search_paths: libs,
-        crate_types: vec![config::CrateType::Executable],
-        output_types: outputs,
-        externs,
-        cg: config::CodegenOptions {
-            linker,
-            ..cg
-        },
-        test: as_test_harness,
-        unstable_features: UnstableFeatures::from_environment(),
-        debugging_opts: config::DebuggingOptions {
-            ..config::basic_debugging_options()
-        },
-        edition,
-        ..config::Options::default()
-    };
+    //let sessopts = config::Options {
+    //    maybe_sysroot,
+    //    search_paths: libs,
+    //    crate_types: vec![config::CrateType::Executable],
+    //    output_types: outputs,
+    //    externs,
+    //    cg: config::CodegenOptions {
+    //        linker,
+    //        ..cg
+    //    },
+    //    test: as_test_harness,
+    //    unstable_features: UnstableFeatures::from_environment(),
+    //    debugging_opts: config::DebuggingOptions {
+    //        ..config::basic_debugging_options()
+    //    },
+    //    edition,
+    //    ..config::Options::default()
+    //};
 
     // Shuffle around a few input and output handles here. We're going to pass
     // an explicit handle into rustc to collect output messages, but we also
@@ -252,25 +252,25 @@ fn run_test(
     //
     // The basic idea is to not use a default Handler for rustc, and then also
     // not print things by default to the actual stderr.
-    struct Sink(Arc<Mutex<Vec<u8>>>);
-    impl Write for Sink {
-        fn write(&mut self, data: &[u8]) -> io::Result<usize> {
-            Write::write(&mut *self.0.lock().unwrap(), data)
-        }
-        fn flush(&mut self) -> io::Result<()> { Ok(()) }
-    }
-    struct Bomb(Arc<Mutex<Vec<u8>>>, Option<Box<dyn Write+Send>>);
-    impl Drop for Bomb {
-        fn drop(&mut self) {
-            let mut old = self.1.take().unwrap();
-            let _ = old.write_all(&self.0.lock().unwrap());
-            io::set_panic(Some(old));
-        }
-    }
-    let data = Arc::new(Mutex::new(Vec::new()));
+    //struct Sink(Arc<Mutex<Vec<u8>>>);
+    //impl Write for Sink {
+    //    fn write(&mut self, data: &[u8]) -> io::Result<usize> {
+    //        Write::write(&mut *self.0.lock().unwrap(), data)
+    //    }
+    //    fn flush(&mut self) -> io::Result<()> { Ok(()) }
+    //}
+    //struct Bomb(Arc<Mutex<Vec<u8>>>, Option<Box<dyn Write+Send>>);
+    //impl Drop for Bomb {
+    //    fn drop(&mut self) {
+    //        let mut old = self.1.take().unwrap();
+    //        let _ = old.write_all(&self.0.lock().unwrap());
+    //        io::set_panic(Some(old));
+    //    }
+    //}
+    //let data = Arc::new(Mutex::new(Vec::new()));
 
-    let old = io::set_panic(Some(box Sink(data.clone())));
-    let _bomb = Bomb(data.clone(), Some(old.unwrap_or(box io::stdout())));
+    //let old = io::set_panic(Some(box Sink(data.clone())));
+    //let _bomb = Bomb(data.clone(), Some(old.unwrap_or(box io::stdout())));
 
     enum DirState {
         Temp(tempfile::TempDir),
@@ -308,41 +308,45 @@ fn run_test(
     };
     let output_file = outdir.path().join("rust_out");
 
-    let config = interface::Config {
-        opts: sessopts,
-        crate_cfg: config::parse_cfgspecs(cfgs),
-        input,
-        input_path: None,
-        output_file: Some(output_file.clone()),
-        output_dir: None,
-        file_loader: None,
-        diagnostic_output: DiagnosticOutput::Raw(box Sink(data.clone())),
-        stderr: Some(data.clone()),
-        crate_name: None,
-        lint_caps: Default::default(),
-    };
+    let input_file = outdir.path().join("input.rs");
+    std::fs::write(&input_file, test).expect("could write out test sources");
 
-    let compile_result = panic::catch_unwind(AssertUnwindSafe(|| {
-        interface::run_compiler(config, |compiler| {
-            if no_run {
-                compiler.global_ctxt().and_then(|global_ctxt| global_ctxt.take().enter(|tcx| {
-                    tcx.analysis(LOCAL_CRATE)
-                })).ok();
-            } else {
-                compiler.compile().ok();
-            };
-            compiler.session().compile_status()
-        })
-    })).map_err(|_| ()).and_then(|s| s.map_err(|_| ()));
+    let mut compiler = Command::new(std::env::current_exe().unwrap().with_file_name("rustc"));
+    for cfg in &cfgs {
+        compiler.arg("--cfg").arg(&cfg);
+    }
+    if let Some(sysroot) = maybe_sysroot {
+        compiler.arg("--sysroot").arg(sysroot);
+    }
+    compiler.arg("--edition").arg(&edition.to_string());
+    compiler.arg(input_file).current_dir(outdir.path());
+    compiler.arg("-o").arg(&output_file);
 
-    match (compile_result, compile_fail) {
-        (Ok(()), true) => {
+    //let config = interface::Config {
+    //    opts: sessopts,
+    //    crate_cfg: config::parse_cfgspecs(cfgs),
+    //    input,
+    //    input_path: None,
+    //    output_file: Some(output_file.clone()),
+    //    output_dir: None,
+    //    file_loader: None,
+    //    diagnostic_output: DiagnosticOutput::Raw(box Sink(data.clone())),
+    //    stderr: Some(data.clone()),
+    //    crate_name: None,
+    //    lint_caps: Default::default(),
+    //};
+
+    let cmd = format!("{:?}", compiler);
+    let output = compiler.output().unwrap();
+
+    match (output.status.success(), compile_fail) {
+        (true, true) => {
             return Err(TestFailure::UnexpectedCompilePass);
         }
-        (Ok(()), false) => {}
-        (Err(_), true) => {
+        (true, false) => {}
+        (false, true) => {
             if !error_codes.is_empty() {
-                let out = String::from_utf8(data.lock().unwrap().to_vec()).unwrap();
+                let out = String::from_utf8(output.stderr).unwrap();
                 error_codes.retain(|err| !out.contains(err));
 
                 if !error_codes.is_empty() {
@@ -350,7 +354,9 @@ fn run_test(
                 }
             }
         }
-        (Err(_), false) => {
+        (false, false) => {
+            eprintln!("{}", cmd);
+            eprintln!("{:?}", output);
             return Err(TestFailure::CompileError);
         }
     }
