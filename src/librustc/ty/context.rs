@@ -2778,7 +2778,7 @@ impl<'tcx> TyCtxt<'tcx> {
     ) -> (lint::Level, lint::LintSource) {
         let sets = self.lint_levels(LOCAL_CRATE);
         loop {
-            if let Some(pair) = sets.level_and_source(lint, id, self.sess) {
+            if let Some(pair) = sets.level_and_source(lint, id) {
                 return pair
             }
             let next = self.hir().get_parent_node(id);

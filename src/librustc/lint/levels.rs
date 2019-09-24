@@ -14,10 +14,16 @@ use syntax::attr;
 use syntax::feature_gate;
 use syntax::source_map::MultiSpan;
 use syntax::symbol::{Symbol, sym};
+use syntax::edition::Edition;
 
 pub struct LintLevelSets {
     list: Vec<LintSet>,
     lint_cap: Level,
+
+    edition: Edition,
+
+    /// Cap lint level specified by a driver specifically.
+    driver_lint_caps: FxHashMap<lint::LintId, lint::Level>,
 }
 
 enum LintSet {
@@ -34,10 +40,12 @@ enum LintSet {
 }
 
 impl LintLevelSets {
-    pub fn new(sess: &Session) -> LintLevelSets {
+    fn new(sess: &Session) -> LintLevelSets {
         let mut me = LintLevelSets {
             list: Vec::new(),
             lint_cap: Level::Forbid,
+            edition: sess.edition(),
+            driver_lint_caps: sess.driver_lint_caps.clone(),
         };
         me.process_command_line(sess);
         return me
@@ -79,15 +87,14 @@ impl LintLevelSets {
     fn get_lint_level(&self,
                       lint: &'static Lint,
                       idx: u32,
-                      aux: Option<&FxHashMap<LintId, (Level, LintSource)>>,
-                      sess: &Session)
+                      aux: Option<&FxHashMap<LintId, (Level, LintSource)>>)
         -> (Level, LintSource)
     {
         let (level, mut src) = self.get_lint_id_level(LintId::of(lint), idx, aux);
 
         // If `level` is none then we actually assume the default level for this
         // lint.
-        let mut level = level.unwrap_or_else(|| lint.default_level(sess.edition()));
+        let mut level = level.unwrap_or_else(|| lint.default_level(self.edition));
 
         // If we're about to issue a warning, check at the last minute for any
         // directives against the warnings "lint". If, for example, there's an
@@ -108,7 +115,7 @@ impl LintLevelSets {
         // Ensure that we never exceed the `--cap-lints` argument.
         level = cmp::min(level, self.lint_cap);
 
-        if let Some(driver_level) = sess.driver_lint_caps.get(&LintId::of(lint)) {
+        if let Some(driver_level) = self.driver_lint_caps.get(&LintId::of(lint)) {
             // Ensure that we never exceed driver level.
             level = cmp::min(*driver_level, level);
         }
@@ -318,7 +325,7 @@ impl<'a> LintLevelsBuilder<'a> {
                                 let lint = builtin::RENAMED_AND_REMOVED_LINTS;
                                 let (lvl, src) =
                                     self.sets
-                                        .get_lint_level(lint, self.cur, Some(&specs), &sess);
+                                        .get_lint_level(lint, self.cur, Some(&specs));
                                 let msg = format!(
                                     "lint name `{}` is deprecated \
                                      and may not have an effect in the future. \
@@ -361,8 +368,7 @@ impl<'a> LintLevelsBuilder<'a> {
                         let lint = builtin::RENAMED_AND_REMOVED_LINTS;
                         let (level, src) = self.sets.get_lint_level(lint,
                                                                     self.cur,
-                                                                    Some(&specs),
-                                                                    &sess);
+                                                                    Some(&specs));
                         let mut err = lint::struct_lint_level(self.sess,
                                                               lint,
                                                               level,
@@ -383,8 +389,7 @@ impl<'a> LintLevelsBuilder<'a> {
                         let lint = builtin::UNKNOWN_LINTS;
                         let (level, src) = self.sets.get_lint_level(lint,
                                                                     self.cur,
-                                                                    Some(&specs),
-                                                                    self.sess);
+                                                                    Some(&specs));
                         let msg = format!("unknown lint: `{}`", name);
                         let mut db = lint::struct_lint_level(self.sess,
                                                 lint,
@@ -479,7 +484,7 @@ impl<'a> LintLevelsBuilder<'a> {
                        msg: &str)
         -> DiagnosticBuilder<'a>
     {
-        let (level, src) = self.sets.get_lint_level(lint, self.cur, None, self.sess);
+        let (level, src) = self.sets.get_lint_level(lint, self.cur, None);
         lint::struct_lint_level(self.sess, lint, level, src, span, msg)
     }
 
@@ -514,11 +519,11 @@ impl LintLevelMap {
     /// If the `id` was not previously registered, returns `None`. If `None` is
     /// returned then the parent of `id` should be acquired and this function
     /// should be called again.
-    pub fn level_and_source(&self, lint: &'static Lint, id: HirId, session: &Session)
+    pub fn level_and_source(&self, lint: &'static Lint, id: HirId)
         -> Option<(Level, LintSource)>
     {
         self.id_to_set.get(&id).map(|idx| {
-            self.sets.get_lint_level(lint, *idx, None, session)
+            self.sets.get_lint_level(lint, *idx, None)
         })
     }
 }
@@ -536,8 +541,12 @@ impl<'a> HashStable<StableHashingContext<'a>> for LintLevelMap {
         let LintLevelSets {
             ref list,
             lint_cap,
+            edition,
+            ref driver_lint_caps,
         } = *sets;
 
+        edition.hash_stable(hcx, hasher);
+        driver_lint_caps.hash_stable(hcx, hasher);
         lint_cap.hash_stable(hcx, hasher);
 
         hcx.while_hashing_spans(true, |hcx| {
