@@ -35,7 +35,7 @@ use crate::util::common::time;
 use errors::DiagnosticBuilder;
 use std::slice;
 use std::default::Default as StdDefault;
-use rustc_data_structures::sync::{ReadGuard, Lock, ParallelIterator, join, par_iter};
+use rustc_data_structures::sync::{Lock, ParallelIterator, join, par_iter};
 use rustc_serialize::{Decoder, Decodable, Encoder, Encodable};
 use syntax::ast;
 use syntax::edition;
@@ -496,9 +496,6 @@ pub struct LateContext<'a, 'tcx> {
     /// Items accessible from the crate being checked.
     pub access_levels: &'a AccessLevels,
 
-    /// The store of registered lints and the lint levels.
-    lint_store: ReadGuard<'a, LintStore>,
-
     last_node_with_lint_attrs: hir::HirId,
 
     /// Generic type parameters in scope for the item we are in.
@@ -524,9 +521,6 @@ pub struct EarlyContext<'a> {
 
     builder: LintLevelsBuilder<'a>,
 
-    /// The store of registered lints and the lint levels.
-    lint_store: ReadGuard<'a, LintStore>,
-
     buffered: LintBuffer,
 }
 
@@ -545,7 +539,6 @@ pub trait LintContext: Sized {
     type PassObject: LintPassObject;
 
     fn sess(&self) -> &Session;
-    fn lints(&self) -> &LintStore;
 
     fn lookup_and_emit<S: Into<MultiSpan>>(&self,
                                            lint: &'static Lint,
@@ -620,7 +613,6 @@ impl<'a> EarlyContext<'a> {
         EarlyContext {
             sess,
             krate,
-            lint_store: sess.lint_store.borrow(),
             builder: LintLevelSets::builder(sess),
             buffered,
         }
@@ -683,10 +675,6 @@ impl LintContext for LateContext<'_, '_> {
         &self.tcx.sess
     }
 
-    fn lints(&self) -> &LintStore {
-        &*self.lint_store
-    }
-
     fn lookup<S: Into<MultiSpan>>(&self,
                                   lint: &'static Lint,
                                   span: Option<S>,
@@ -709,10 +697,6 @@ impl LintContext for EarlyContext<'_> {
     /// Gets the overall compiler `Session` object.
     fn sess(&self) -> &Session {
         &self.sess
-    }
-
-    fn lints(&self) -> &LintStore {
-        &*self.lint_store
     }
 
     fn lookup<S: Into<MultiSpan>>(&self,
@@ -1368,7 +1352,6 @@ fn late_lint_mod_pass<'tcx, T: for<'a> LateLintPass<'a, 'tcx>>(
         tables: &ty::TypeckTables::empty(None),
         param_env: ty::ParamEnv::empty(),
         access_levels,
-        lint_store: tcx.sess.lint_store.borrow(),
         last_node_with_lint_attrs: tcx.hir().as_local_hir_id(module_def_id).unwrap(),
         generics: None,
         only_module: true,
@@ -1418,7 +1401,6 @@ fn late_lint_pass_crate<'tcx, T: for<'a> LateLintPass<'a, 'tcx>>(tcx: TyCtxt<'tc
         tables: &ty::TypeckTables::empty(None),
         param_env: ty::ParamEnv::empty(),
         access_levels,
-        lint_store: tcx.sess.lint_store.borrow(),
         last_node_with_lint_attrs: hir::CRATE_HIR_ID,
         generics: None,
         only_module: false,
