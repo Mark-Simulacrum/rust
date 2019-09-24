@@ -43,7 +43,7 @@ impl LintLevelSets {
     fn new(sess: &Session) -> LintLevelSets {
         let mut me = LintLevelSets {
             list: Vec::new(),
-            lint_cap: Level::Forbid,
+            lint_cap: sess.opts.lint_cap.unwrap_or(Level::Forbid),
             edition: sess.edition(),
             driver_lint_caps: sess.driver_lint_caps.clone(),
         };
@@ -58,7 +58,6 @@ impl LintLevelSets {
     fn process_command_line(&mut self, sess: &Session) {
         let store = sess.lint_store.borrow();
         let mut specs = FxHashMap::default();
-        self.lint_cap = sess.opts.lint_cap.unwrap_or(Level::Forbid);
 
         for &(ref lint_name, level) in &sess.opts.lint_opts {
             store.check_lint_name_cmdline(sess.diagnostic(), &lint_name, level);
