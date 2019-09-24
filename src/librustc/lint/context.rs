@@ -328,16 +328,16 @@ impl LintStore {
 
     /// Checks the validity of lint names derived from the command line
     pub fn check_lint_name_cmdline(&self,
-                                   sess: &Session,
+                                   handler: &errors::Handler,
                                    lint_name: &str,
                                    level: Level) {
         let db = match self.check_lint_name(lint_name, None) {
             CheckLintNameResult::Ok(_) => None,
             CheckLintNameResult::Warning(ref msg, _) => {
-                Some(sess.struct_warn(msg))
+                Some(handler.struct_warn(msg))
             },
             CheckLintNameResult::NoLint(suggestion) => {
-                let mut err = struct_err!(sess, E0602, "unknown lint: `{}`", lint_name);
+                let mut err = struct_err!(handler, E0602, "unknown lint: `{}`", lint_name);
 
                 if let Some(suggestion) = suggestion {
                     err.help(&format!("did you mean: `{}`", suggestion));
@@ -346,7 +346,7 @@ impl LintStore {
                 Some(err)
             }
             CheckLintNameResult::Tool(result) => match result {
-                Err((Some(_), new_name)) => Some(sess.struct_warn(&format!(
+                Err((Some(_), new_name)) => Some(handler.struct_warn(&format!(
                     "lint name `{}` is deprecated \
                      and does not have an effect anymore. \
                      Use: {}",

@@ -53,7 +53,7 @@ impl LintLevelSets {
         self.lint_cap = sess.opts.lint_cap.unwrap_or(Level::Forbid);
 
         for &(ref lint_name, level) in &sess.opts.lint_opts {
-            store.check_lint_name_cmdline(sess, &lint_name, level);
+            store.check_lint_name_cmdline(sess.diagnostic(), &lint_name, level);
 
             // If the cap is less than this specified level, e.g., if we've got
             // `--cap-lints allow` but we've also got `-D foo` then we ignore
