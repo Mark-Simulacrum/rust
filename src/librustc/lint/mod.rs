@@ -91,9 +91,9 @@ impl Lint {
         self.name.to_ascii_lowercase()
     }
 
-    pub fn default_level(&self, session: &Session) -> Level {
+    pub fn default_level(&self, edition: Edition) -> Level {
         self.edition_lint_opts
-            .filter(|(e, _)| *e <= session.edition())
+            .filter(|(e, _)| *e <= edition)
             .map(|(_, l)| l)
             .unwrap_or(self.default_level)
     }

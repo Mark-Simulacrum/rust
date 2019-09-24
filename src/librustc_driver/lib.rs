@@ -66,6 +66,7 @@ use syntax::source_map::FileLoader;
 use syntax::feature_gate::{GatedCfg, UnstableFeatures};
 use syntax::parse::{self, PResult};
 use syntax::symbol::sym;
+use syntax::edition::Edition;
 use syntax_pos::{DUMMY_SP, FileName};
 
 pub mod pretty;
@@ -202,7 +203,7 @@ pub fn run_compiler(
                         let sopts = &compiler.session().opts;
                         if sopts.describe_lints {
                             describe_lints(
-                                compiler.session(),
+                                compiler.session().edition(),
                                 &*compiler.session().lint_store.borrow(),
                                 false
                             );
@@ -324,7 +325,7 @@ pub fn run_compiler(
 
         // Lint plugins are registered; now we can process command line flags.
         if sess.opts.describe_lints {
-            describe_lints(&sess, &sess.lint_store.borrow(), true);
+            describe_lints(sess.edition(), &sess.lint_store.borrow(), true);
             return sess.compile_status();
         }
 
@@ -822,7 +823,7 @@ the command line flag directly.
 ");
 }
 
-fn describe_lints(sess: &Session, lint_store: &lint::LintStore, loaded_plugins: bool) {
+fn describe_lints(edition: Edition, lint_store: &lint::LintStore, loaded_plugins: bool) {
     println!("
 Available lint options:
     -W <foo>           Warn about <foo>
@@ -834,10 +835,10 @@ Available lint options:
 
 ");
 
-    fn sort_lints(sess: &Session, lints: Vec<(&'static Lint, bool)>) -> Vec<&'static Lint> {
+    fn sort_lints(edition: Edition, lints: Vec<(&'static Lint, bool)>) -> Vec<&'static Lint> {
         let mut lints: Vec<_> = lints.into_iter().map(|(x, _)| x).collect();
         // The sort doesn't case-fold but it's doubtful we care.
-        lints.sort_by_cached_key(|x: &&Lint| (x.default_level(sess), x.name));
+        lints.sort_by_cached_key(|x: &&Lint| (x.default_level(edition), x.name));
         lints
     }
 
@@ -852,8 +853,8 @@ Available lint options:
                                                    .iter()
                                                    .cloned()
                                                    .partition(|&(_, p)| p);
-    let plugin = sort_lints(sess, plugin);
-    let builtin = sort_lints(sess, builtin);
+    let plugin = sort_lints(edition, plugin);
+    let builtin = sort_lints(edition, builtin);
 
     let (plugin_groups, builtin_groups): (Vec<_>, _) = lint_store.get_lint_groups()
                                                                  .iter()
