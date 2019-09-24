@@ -1446,9 +1446,6 @@ fn late_lint_crate<'tcx, T: for<'a> LateLintPass<'a, 'tcx>>(tcx: TyCtxt<'tcx>, b
             });
         }
     }
-
-    // Put the passes back in the session.
-    *tcx.sess.lint_store.borrow().late_passes.lock() = Some(passes);
 }
 
 /// Performs lint checking on a crate.
@@ -1570,13 +1567,6 @@ pub fn check_ast_crate<T: EarlyLintPass>(
                 )
             });
         }
-    }
-
-    // Put the lint store levels and passes back in the session.
-    if pre_expansion {
-        sess.lint_store.borrow_mut().pre_expansion_passes = Some(passes);
-    } else {
-        sess.lint_store.borrow_mut().early_passes = Some(passes);
     }
 
     // All of the buffered lints should have been emitted at this point.
