@@ -53,10 +53,25 @@ pub struct LintStore {
     lints: Vec<(&'static Lint, bool)>,
 
     /// Trait objects for each lint pass.
-    /// This is only `None` while performing a lint pass.
+    ///
+    /// These are intended to be filled in very early in the compilation
+    /// process, and then stolen via replacement with None when we run these
+    /// passes.
+    ///
+    /// Since we only acquire the lock shortly to replace with None, this is
+    /// safe from parallelism issues. It is notably a programmer bug if we
+    /// attempt to run these passes twice.
     pre_expansion_passes: Lock<Option<Vec<EarlyLintPassObject>>>,
     early_passes: Lock<Option<Vec<EarlyLintPassObject>>>,
     late_passes: Lock<Option<Vec<LateLintPassObject>>>,
+
+    /// This field is not behind a lock. It is similarly populated, but
+    /// consumption currently goes through fresh_late_module_passes() which'll
+    /// call fresh_late_pass()
+    ///
+    /// FIXME: These are *never* actually used; fresh_late_pass() always panic!s.
+    /// We can probably just drop them entirely, though it's not clear that
+    /// there aren't lints trying to use these module passes today.
     late_module_passes: Vec<LateLintPassObject>,
 
     /// Lints indexed by name.

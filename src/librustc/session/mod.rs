@@ -78,9 +78,15 @@ pub struct Session {
     /// if the value stored here has been affected by path remapping.
     pub working_dir: (PathBuf, bool),
 
-    // FIXME: `lint_store` and `buffered_lints` are not thread-safe,
-    // but are only used in a single thread.
+    /// We utilize the lock here during the initial part of compilation (e.g.,
+    /// plugin loading) to register new lints from various sources.
+    ///
+    /// After that initial population, this is only ever acquired as a read-only
+    /// lock. Note that there are some internal locks as well, which *are*
+    /// acquired after the initial population: those are to run the passes.
     pub lint_store: RwLock<lint::LintStore>,
+    // FIXME: `buffered_lints` is not thread-safe,
+    // but is only used in a single thread (this may not actually be true).
     pub buffered_lints: Lock<Option<lint::LintBuffer>>,
 
     /// Set of `(DiagnosticId, Option<Span>, message)` tuples tracking
