@@ -3,7 +3,7 @@ use std::cmp;
 use crate::hir::HirId;
 use crate::ich::StableHashingContext;
 use crate::lint::builtin;
-use crate::lint::context::CheckLintNameResult;
+use crate::lint::context::{LintStore, CheckLintNameResult};
 use crate::lint::{self, Lint, LintId, Level, LintSource};
 use crate::session::Session;
 use crate::util::nodemap::FxHashMap;
@@ -40,23 +40,22 @@ enum LintSet {
 }
 
 impl LintLevelSets {
-    fn new(sess: &Session) -> LintLevelSets {
+    fn new(sess: &Session, store: &LintStore) -> LintLevelSets {
         let mut me = LintLevelSets {
             list: Vec::new(),
             lint_cap: sess.opts.lint_cap.unwrap_or(Level::Forbid),
             edition: sess.edition(),
             driver_lint_caps: sess.driver_lint_caps.clone(),
         };
-        me.process_command_line(sess);
+        me.process_command_line(sess, store);
         return me
     }
 
-    pub fn builder(sess: &Session) -> LintLevelsBuilder<'_> {
-        LintLevelsBuilder::new(sess, LintLevelSets::new(sess))
+    pub fn builder<'a>(sess: &'a Session, store: &'a LintStore) -> LintLevelsBuilder<'a> {
+        LintLevelsBuilder::new(sess, store, LintLevelSets::new(sess, store))
     }
 
-    fn process_command_line(&mut self, sess: &Session) {
-        let store = sess.lint_store.borrow();
+    fn process_command_line(&mut self, sess: &Session, store: &LintStore) {
         let mut specs = FxHashMap::default();
 
         for &(ref lint_name, level) in &sess.opts.lint_opts {
@@ -154,6 +153,7 @@ impl LintLevelSets {
 
 pub struct LintLevelsBuilder<'a> {
     sess: &'a Session,
+    store: &'a LintStore,
     sets: LintLevelSets,
     id_to_set: FxHashMap<HirId, u32>,
     cur: u32,
@@ -166,10 +166,12 @@ pub struct BuilderPush {
 }
 
 impl<'a> LintLevelsBuilder<'a> {
-    pub fn new(sess: &'a Session, sets: LintLevelSets) -> LintLevelsBuilder<'a> {
+    pub fn new(
+        sess: &'a Session, store: &'a LintStore, sets: LintLevelSets) -> LintLevelsBuilder<'a> {
         assert_eq!(sets.list.len(), 1);
         LintLevelsBuilder {
             sess,
+            store,
             sets,
             cur: 0,
             id_to_set: Default::default(),
@@ -193,7 +195,6 @@ impl<'a> LintLevelsBuilder<'a> {
     /// Don't forget to call `pop`!
     pub fn push(&mut self, attrs: &[ast::Attribute]) -> BuilderPush {
         let mut specs = FxHashMap::default();
-        let store = self.sess.lint_store.borrow();
         let sess = self.sess;
         let bad_attr = |span| {
             struct_span_err!(sess, span, E0452, "malformed lint attribute input")
@@ -301,7 +302,7 @@ impl<'a> LintLevelsBuilder<'a> {
                     None
                 };
                 let name = meta_item.path.segments.last().expect("empty lint name").ident.name;
-                match store.check_lint_name(&name.as_str(), tool_name) {
+                match self.store.check_lint_name(&name.as_str(), tool_name) {
                     CheckLintNameResult::Ok(ids) => {
                         let src = LintSource::Node(name, li.span(), reason);
                         for id in ids {

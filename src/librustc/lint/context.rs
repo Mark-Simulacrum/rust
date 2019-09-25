@@ -514,6 +514,8 @@ pub struct EarlyContext<'a> {
     /// Type context we're checking in.
     pub sess: &'a Session,
 
+    pub store: &'a LintStore,
+
     /// The crate being checked.
     pub krate: &'a ast::Crate,
 
@@ -605,13 +607,15 @@ pub trait LintContext: Sized {
 impl<'a> EarlyContext<'a> {
     fn new(
         sess: &'a Session,
+        store: &'a LintStore,
         krate: &'a ast::Crate,
         buffered: LintBuffer,
     ) -> EarlyContext<'a> {
         EarlyContext {
             sess,
             krate,
-            builder: LintLevelSets::builder(sess),
+            store,
+            builder: LintLevelSets::builder(sess, store),
             buffered,
         }
     }
@@ -1505,12 +1509,13 @@ early_lint_methods!(early_lint_pass_impl, []);
 
 fn early_lint_crate<T: EarlyLintPass>(
     sess: &Session,
+    store: &LintStore,
     krate: &ast::Crate,
     pass: T,
     buffered: LintBuffer,
 ) -> LintBuffer {
     let mut cx = EarlyContextAndPass {
-        context: EarlyContext::new(sess, krate, buffered),
+        context: EarlyContext::new(sess, store, krate, buffered),
         pass,
     };
 
@@ -1533,24 +1538,27 @@ pub fn check_ast_crate<T: EarlyLintPass>(
     pre_expansion: bool,
     builtin_lints: T,
 ) {
+    let mut store = sess.lint_store.borrow_mut();
+
     let (mut passes, mut buffered) = if pre_expansion {
         (
-            sess.lint_store.borrow_mut().pre_expansion_passes.take().unwrap(),
+            store.pre_expansion_passes.take().unwrap(),
             LintBuffer::default(),
         )
     } else {
         (
-            sess.lint_store.borrow_mut().early_passes.take().unwrap(),
+            store.early_passes.take().unwrap(),
             sess.buffered_lints.borrow_mut().take().unwrap(),
         )
     };
 
     if !sess.opts.debugging_opts.no_interleave_lints {
-        buffered = early_lint_crate(sess, krate, builtin_lints, buffered);
+        buffered = early_lint_crate(sess, &store, krate, builtin_lints, buffered);
 
         if !passes.is_empty() {
             buffered = early_lint_crate(
                 sess,
+                &store,
                 krate,
                 EarlyLintPassObjects { lints: &mut passes[..] },
                 buffered,
@@ -1561,6 +1569,7 @@ pub fn check_ast_crate<T: EarlyLintPass>(
             buffered = time(sess, &format!("running lint: {}", pass.name()), || {
                 early_lint_crate(
                     sess,
+                    &store,
                     krate,
                     EarlyLintPassObjects { lints: slice::from_mut(pass) },
                     buffered,

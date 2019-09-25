@@ -753,8 +753,9 @@ pub fn maybe_lint_level_root(tcx: TyCtxt<'_>, id: hir::HirId) -> bool {
 
 fn lint_levels(tcx: TyCtxt<'_>, cnum: CrateNum) -> &LintLevelMap {
     assert_eq!(cnum, LOCAL_CRATE);
+    let store = tcx.sess.lint_store.borrow();
     let mut builder = LintLevelMapBuilder {
-        levels: LintLevelSets::builder(tcx.sess),
+        levels: LintLevelSets::builder(tcx.sess, &store),
         tcx: tcx,
     };
     let krate = tcx.hir().krate();
@@ -762,7 +763,7 @@ fn lint_levels(tcx: TyCtxt<'_>, cnum: CrateNum) -> &LintLevelMap {
     let push = builder.levels.push(&krate.attrs);
     builder.levels.register_id(hir::CRATE_HIR_ID);
     for macro_def in &krate.exported_macros {
-       builder.levels.register_id(macro_def.hir_id);
+    builder.levels.register_id(macro_def.hir_id);
     }
     intravisit::walk_crate(&mut builder, krate);
     builder.levels.pop(push);
@@ -770,12 +771,12 @@ fn lint_levels(tcx: TyCtxt<'_>, cnum: CrateNum) -> &LintLevelMap {
     tcx.arena.alloc(builder.levels.build_map())
 }
 
-struct LintLevelMapBuilder<'tcx> {
-    levels: levels::LintLevelsBuilder<'tcx>,
+struct LintLevelMapBuilder<'a, 'tcx> {
+    levels: levels::LintLevelsBuilder<'a>,
     tcx: TyCtxt<'tcx>,
 }
 
-impl LintLevelMapBuilder<'tcx> {
+impl LintLevelMapBuilder<'_, '_> {
     fn with_lint_attrs<F>(&mut self,
                           id: hir::HirId,
                           attrs: &[ast::Attribute],
@@ -791,7 +792,7 @@ impl LintLevelMapBuilder<'tcx> {
     }
 }
 
-impl intravisit::Visitor<'tcx> for LintLevelMapBuilder<'tcx> {
+impl intravisit::Visitor<'tcx> for LintLevelMapBuilder<'_, 'tcx> {
     fn nested_visit_map<'this>(&'this mut self) -> intravisit::NestedVisitorMap<'this, 'tcx> {
         intravisit::NestedVisitorMap::All(&self.tcx.hir())
     }
