@@ -477,6 +477,10 @@ impl LintStore {
             _ => CheckLintNameResult::NoLint(None),
         }
     }
+
+    fn fresh_late_module_passes(&self) -> Vec<LateLintPassObject> {
+        self.late_module_passes.iter().map(|pass| pass.fresh_late_pass()).collect()
+    }
 }
 
 /// Context for lint checking after type checking.
@@ -1385,8 +1389,7 @@ pub fn late_lint_mod<'tcx, T: for<'a> LateLintPass<'a, 'tcx>>(
 
     late_lint_mod_pass(tcx, module_def_id, builtin_lints);
 
-    let mut passes: Vec<_> = tcx.sess.lint_store.borrow().late_module_passes
-                                .iter().map(|pass| pass.fresh_late_pass()).collect();
+    let mut passes = tcx.sess.lint_store.borrow().fresh_late_module_passes();
 
     if !passes.is_empty() {
         late_lint_mod_pass(tcx, module_def_id, LateLintPassObjects { lints: &mut passes[..] });
@@ -1441,8 +1444,7 @@ fn late_lint_crate<'tcx, T: for<'a> LateLintPass<'a, 'tcx>>(tcx: TyCtxt<'tcx>, b
             });
         }
 
-        let mut passes: Vec<_> = tcx.sess.lint_store.borrow().late_module_passes
-                                    .iter().map(|pass| pass.fresh_late_pass()).collect();
+        let mut passes = tcx.sess.lint_store.borrow().fresh_late_module_passes();
 
         for pass in &mut passes {
             time(tcx.sess, &format!("running late module lint: {}", pass.name()), || {
