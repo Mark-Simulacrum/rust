@@ -54,8 +54,8 @@ pub struct LintStore {
 
     /// Trait objects for each lint pass.
     /// This is only `None` while performing a lint pass.
-    pre_expansion_passes: Option<Vec<EarlyLintPassObject>>,
-    early_passes: Option<Vec<EarlyLintPassObject>>,
+    pre_expansion_passes: Lock<Option<Vec<EarlyLintPassObject>>>,
+    early_passes: Lock<Option<Vec<EarlyLintPassObject>>>,
     late_passes: Lock<Option<Vec<LateLintPassObject>>>,
     late_module_passes: Vec<LateLintPassObject>,
 
@@ -142,8 +142,8 @@ impl LintStore {
     pub fn new() -> LintStore {
         LintStore {
             lints: vec![],
-            pre_expansion_passes: Some(vec![]),
-            early_passes: Some(vec![]),
+            pre_expansion_passes: Lock::new(Some(vec![])),
+            early_passes: Lock::new(Some(vec![])),
             late_passes: Lock::new(Some(vec![])),
             late_module_passes: vec![],
             by_name: Default::default(),
@@ -174,7 +174,7 @@ impl LintStore {
                                pass: EarlyLintPassObject) {
         self.push_lints(from_plugin, pass.get_lints());
         if !register_only {
-            self.early_passes.as_mut().unwrap().push(pass);
+            self.early_passes.get_mut().as_mut().unwrap().push(pass);
         }
     }
 
@@ -186,7 +186,7 @@ impl LintStore {
     ) {
         self.push_lints(from_plugin, pass.get_lints());
         if !register_only {
-            self.pre_expansion_passes.as_mut().unwrap().push(pass);
+            self.pre_expansion_passes.get_mut().as_mut().unwrap().push(pass);
         }
     }
 
@@ -200,7 +200,7 @@ impl LintStore {
             if per_module {
                 self.late_module_passes.push(pass);
             } else {
-                self.late_passes.lock().as_mut().unwrap().push(pass);
+                self.late_passes.get_mut().as_mut().unwrap().push(pass);
             }
         }
     }
@@ -1540,16 +1540,16 @@ pub fn check_ast_crate<T: EarlyLintPass>(
     pre_expansion: bool,
     builtin_lints: T,
 ) {
-    let mut store = sess.lint_store.borrow_mut();
+    let store = sess.lint_store.borrow();
 
     let (mut passes, mut buffered) = if pre_expansion {
         (
-            store.pre_expansion_passes.take().unwrap(),
+            store.pre_expansion_passes.borrow_mut().take().unwrap(),
             LintBuffer::default(),
         )
     } else {
         (
-            store.early_passes.take().unwrap(),
+            store.early_passes.borrow_mut().take().unwrap(),
             sess.buffered_lints.borrow_mut().take().unwrap(),
         )
     };
