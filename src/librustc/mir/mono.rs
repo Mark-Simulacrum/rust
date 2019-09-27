@@ -6,7 +6,7 @@ use syntax::source_map::Span;
 use crate::ty::{Instance, InstanceDef, TyCtxt, SymbolName, subst::InternalSubsts};
 use crate::util::nodemap::FxHashMap;
 use crate::ty::print::obsolete::DefPathBasedNames;
-use crate::dep_graph::{WorkProductId, DepNode, WorkProduct, DepConstructor};
+use crate::dep_graph::{WorkProductId, DepNode, WorkProduct};
 use rustc_data_structures::base_n;
 use rustc_data_structures::stable_hasher::{HashStable, StableHasherResult,
                                            StableHasher};
@@ -414,7 +414,7 @@ impl<'tcx> CodegenUnit<'tcx> {
     }
 
     pub fn codegen_dep_node(&self, tcx: TyCtxt<'tcx>) -> DepNode {
-        DepNode::new(tcx, DepConstructor::CompileCodegenUnit(self.name().clone()))
+        DepNode::new_compile_codegen_unit(tcx, self.name().clone())
     }
 }
 

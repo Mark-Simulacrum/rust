@@ -198,6 +198,46 @@ macro_rules! define_dep_nodes {
         }
 
         impl DepNode {
+            pub fn new_compile_codegen_unit(tcx: TyCtxt<'tcx>, s: InternedString) -> DepNode {
+                let hash = DepNodeParams::to_fingerprint(&s, tcx);
+                let dep_node = DepNode {
+                    kind: DepKind::CompileCodegenUnit,
+                    hash
+                };
+
+                if cfg!(debug_assertions) &&
+                    !dep_node.kind.can_reconstruct_query_key() &&
+                    (tcx.sess.opts.debugging_opts.incremental_info ||
+                     tcx.sess.opts.debugging_opts.query_dep_graph)
+                {
+                    tcx.dep_graph.register_dep_node_debug_str(dep_node, || {
+                        s.to_debug_str(tcx)
+                    });
+                }
+
+                dep_node
+            }
+
+            pub fn new_crate_metadata(tcx: TyCtxt<'tcx>, cnum: CrateNum) -> DepNode {
+                let hash = DepNodeParams::to_fingerprint(&cnum, tcx);
+                let dep_node = DepNode {
+                    kind: DepKind::CrateMetadata,
+                    hash
+                };
+
+                if cfg!(debug_assertions) &&
+                    !dep_node.kind.can_reconstruct_query_key() &&
+                    (tcx.sess.opts.debugging_opts.incremental_info ||
+                     tcx.sess.opts.debugging_opts.query_dep_graph)
+                {
+                    tcx.dep_graph.register_dep_node_debug_str(dep_node, || {
+                        cnum.to_debug_str(tcx)
+                    });
+                }
+
+                dep_node
+            }
+
             #[allow(unreachable_code, non_snake_case)]
             #[inline(always)]
             pub fn new<'tcx>(tcx: TyCtxt<'tcx>,

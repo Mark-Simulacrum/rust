@@ -2,7 +2,7 @@
 
 use crate::arena::Arena;
 use crate::dep_graph::DepGraph;
-use crate::dep_graph::{self, DepNode, DepConstructor};
+use crate::dep_graph::{self, DepNode};
 use crate::session::Session;
 use crate::session::config::{BorrowckMode, OutputFilenames};
 use crate::session::config::CrateType;
@@ -1416,7 +1416,8 @@ impl<'tcx> TyCtxt<'tcx> {
         // We cannot use the query versions of crates() and crate_hash(), since
         // those would need the DepNodes that we are allocating here.
         for cnum in self.cstore.crates_untracked() {
-            let dep_node = DepNode::new(self, DepConstructor::CrateMetadata(cnum));
+            // N.B. don't use DepNode::new here as we then inline an enormous function
+            let dep_node = DepNode::new_crate_metadata(self, cnum);
             let crate_hash = self.cstore.crate_hash_untracked(cnum);
             self.dep_graph.with_task(dep_node,
                                      self,
