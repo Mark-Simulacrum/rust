@@ -771,25 +771,50 @@ where
     I: Iterator<Item = &'a CodegenUnit<'tcx>>,
     'tcx: 'a,
 {
+    use std::fmt::Write;
     if cfg!(debug_assertions) {
-        debug!("{}", label);
+        let mut out = String::new();
+        writeln!(out, "{}", label).unwrap();
+
+        let mut cgus_info = Vec::new();
+
         for cgu in cgus {
-            debug!("CodegenUnit {}:", cgu.name());
+            let mut info = Vec::new();
 
             for (mono_item, linkage) in cgu.items() {
                 let symbol_name = mono_item.symbol_name(tcx).name.as_str();
                 let symbol_hash_start = symbol_name.rfind('h');
                 let symbol_hash = symbol_hash_start.map(|i| &symbol_name[i ..])
                                                    .unwrap_or("<no hash>");
-
-                debug!(" - {} [{:?}] [{}]",
-                       mono_item.to_string(tcx, true),
-                       linkage,
-                       symbol_hash);
+                info.push((
+                    mono_item.to_string(tcx, true),
+                    linkage,
+                    mono_item.size_estimate(tcx),
+                    symbol_hash.to_string(),
+                ));
             }
 
-            debug!("");
+            info.sort_by_key(|(_, _, size, _)| *size);
+
+            cgus_info.push((cgu.name().to_string(), cgu.items().len(), info));
         }
+
+        cgus_info.sort_by_key(|(_, items, _)| *items);
+
+        for (name, items, info) in cgus_info {
+            writeln!(out, "CodegenUnit {} ({} items):", name, items).unwrap();
+            for (name, _linkage, size, _hash) in info {
+                writeln!(out, "{} stmts for {}", size, name).unwrap();
+            }
+            writeln!(out, "").unwrap();
+        }
+
+        let _ = std::fs::create_dir_all(&format!("/tmp/cg-dumps/{}", tcx.crate_name(LOCAL_CRATE)));
+        std::fs::write(
+            &format!("/tmp/cg-dumps/{}/{}.codegen-units",
+                tcx.crate_name(LOCAL_CRATE), label.replace(" ", "_")),
+            out,
+        ).unwrap();
     }
 }
 
