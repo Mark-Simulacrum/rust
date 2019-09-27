@@ -167,10 +167,11 @@ impl<'tcx> InstanceDef<'tcx> {
 impl<'tcx> fmt::Display for Instance<'tcx> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         ty::tls::with(|tcx| {
+            let mut s = String::new();
             let substs = tcx.lift(&self.substs).expect("could not lift for printing");
-            FmtPrinter::new(tcx, &mut *f, Namespace::ValueNS)
+            FmtPrinter::new(tcx, &mut s, Namespace::ValueNS)
                 .print_def_path(self.def_id(), substs)?;
-            Ok(())
+            f.write_str(&s)
         })?;
 
         match self.def {

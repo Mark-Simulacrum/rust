@@ -2325,10 +2325,11 @@ impl<'tcx> Debug for Rvalue<'tcx> {
 
                         let f = &mut *fmt;
                         ty::tls::with(|tcx| {
+                            let mut s = String::new();
                             let substs = tcx.lift(&substs).expect("could not lift for printing");
-                            FmtPrinter::new(tcx, f, Namespace::ValueNS)
+                            FmtPrinter::new(tcx, &mut s, Namespace::ValueNS)
                                 .print_def_path(variant_def.def_id, substs)?;
-                            Ok(())
+                            f.write_str(&s)
                         })?;
 
                         match variant_def.ctor_kind {

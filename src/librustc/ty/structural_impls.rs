@@ -35,9 +35,10 @@ impl fmt::Debug for ty::GenericParamDef {
 impl fmt::Debug for ty::TraitDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         ty::tls::with(|tcx| {
-            FmtPrinter::new(tcx, f, Namespace::TypeNS)
+            let mut s = String::new();
+            FmtPrinter::new(tcx, &mut s, Namespace::TypeNS)
                 .print_def_path(self.def_id, &[])?;
-            Ok(())
+            f.write_str(&s)
         })
     }
 }
@@ -45,9 +46,10 @@ impl fmt::Debug for ty::TraitDef {
 impl fmt::Debug for ty::AdtDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         ty::tls::with(|tcx| {
-            FmtPrinter::new(tcx, f, Namespace::TypeNS)
+            let mut s = String::new();
+            FmtPrinter::new(tcx, &mut s, Namespace::TypeNS)
                 .print_def_path(self.did, &[])?;
-            Ok(())
+            f.write_str(&s)
         })
     }
 }

@@ -346,17 +346,19 @@ impl NiceRegionError<'me, 'tcx> {
 
         impl<'tcx, T> fmt::Display for Highlighted<'tcx, T>
         where
-            T: for<'a, 'b, 'c> Print<
+            T: for<'a, 'b> Print<
                 'tcx,
-                FmtPrinter<'a, 'tcx, &'b mut fmt::Formatter<'c>>,
+                FmtPrinter<'a, 'tcx, 'b>,
                 Error = fmt::Error,
             >,
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                let mut printer = ty::print::FmtPrinter::new(self.tcx, f, Namespace::TypeNS);
+                let mut s = String::new();
+                let mut printer = ty::print::FmtPrinter::new(self.tcx, &mut s, Namespace::TypeNS);
                 printer.region_highlight_mode = self.highlight;
 
                 self.value.print(printer)?;
+                f.write_str(&s)?;
                 Ok(())
             }
         }

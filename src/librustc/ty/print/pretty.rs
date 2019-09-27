@@ -980,7 +980,7 @@ pub trait PrettyPrinter<'tcx>:
 }
 
 // HACK(eddyb) boxed to avoid moving around a large struct by-value.
-pub struct FmtPrinter<'a, 'tcx, F>(Box<FmtPrinterData<'a, 'tcx, F>>);
+pub struct FmtPrinter<'a, 'tcx, 'buf>(Box<FmtPrinterData<'a, 'tcx, &'buf mut String>>);
 
 pub struct FmtPrinterData<'a, 'tcx, F> {
     tcx: TyCtxt<'tcx>,
@@ -998,21 +998,21 @@ pub struct FmtPrinterData<'a, 'tcx, F> {
     pub name_resolver: Option<Box<&'a dyn Fn(ty::sty::TyVid) -> Option<String>>>,
 }
 
-impl<F> Deref for FmtPrinter<'a, 'tcx, F> {
-    type Target = FmtPrinterData<'a, 'tcx, F>;
+impl Deref for FmtPrinter<'a, 'tcx, 'b> {
+    type Target = FmtPrinterData<'a, 'tcx, &'b mut String>;
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<F> DerefMut for FmtPrinter<'_, '_, F> {
+impl DerefMut for FmtPrinter<'_, '_, '_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl<F> FmtPrinter<'a, 'tcx, F> {
-    pub fn new(tcx: TyCtxt<'tcx>, fmt: F, ns: Namespace) -> Self {
+impl FmtPrinter<'a, 'tcx, 'buf> {
+    pub fn new(tcx: TyCtxt<'tcx>, fmt: &'buf mut String, ns: Namespace) -> Self {
         FmtPrinter(Box::new(FmtPrinterData {
             tcx,
             fmt,
@@ -1059,13 +1059,13 @@ impl TyCtxt<'_> {
     }
 }
 
-impl<F: fmt::Write> fmt::Write for FmtPrinter<'_, '_, F> {
+impl fmt::Write for FmtPrinter<'_, '_, '_> {
     fn write_str(&mut self, s: &str) -> fmt::Result {
         self.fmt.write_str(s)
     }
 }
 
-impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
+impl Printer<'tcx> for FmtPrinter<'_, 'tcx, '_> {
     type Error = fmt::Error;
 
     type Path = Self;
@@ -1274,7 +1274,7 @@ impl<F: fmt::Write> Printer<'tcx> for FmtPrinter<'_, 'tcx, F> {
     }
 }
 
-impl<F: fmt::Write> PrettyPrinter<'tcx> for FmtPrinter<'_, 'tcx, F> {
+impl PrettyPrinter<'tcx> for FmtPrinter<'_, 'tcx, '_> {
     fn infer_ty_name(&self, id: ty::TyVid) -> Option<String> {
         self.0.name_resolver.as_ref().and_then(|func| func(id))
     }
@@ -1367,7 +1367,7 @@ impl<F: fmt::Write> PrettyPrinter<'tcx> for FmtPrinter<'_, 'tcx, F> {
 }
 
 // HACK(eddyb) limited to `FmtPrinter` because of `region_highlight_mode`.
-impl<F: fmt::Write> FmtPrinter<'_, '_, F> {
+impl FmtPrinter<'_, '_, '_> {
     pub fn pretty_print_region(
         mut self,
         region: ty::Region<'_>,
@@ -1466,7 +1466,7 @@ impl<F: fmt::Write> FmtPrinter<'_, '_, F> {
 
 // HACK(eddyb) limited to `FmtPrinter` because of `binder_depth`,
 // `region_index` and `used_region_names`.
-impl<F: fmt::Write> FmtPrinter<'_, 'tcx, F> {
+impl FmtPrinter<'_, 'tcx, '_> {
     pub fn pretty_in_binder<T>(mut self, value: &ty::Binder<T>) -> Result<Self, fmt::Error>
     where
         T: Print<'tcx, Self, Output = Self, Error = fmt::Error> + TypeFoldable<'tcx>,
@@ -1588,10 +1588,11 @@ macro_rules! forward_display_to_print {
         $(impl fmt::Display for $ty {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 ty::tls::with(|tcx| {
+                    let mut s = String::new();
                     tcx.lift(self)
                         .expect("could not lift for printing")
-                        .print(FmtPrinter::new(tcx, f, Namespace::TypeNS))?;
-                    Ok(())
+                        .print(FmtPrinter::new(tcx, &mut s, Namespace::TypeNS))?;
+                    f.write_str(&s)
                 })
             }
         })+
@@ -1621,8 +1622,9 @@ macro_rules! define_print_and_forward_display {
 impl fmt::Display for ty::RegionKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         ty::tls::with(|tcx| {
-            self.print(FmtPrinter::new(tcx, f, Namespace::TypeNS))?;
-            Ok(())
+            let mut s = String::new();
+            self.print(FmtPrinter::new(tcx, &mut s, Namespace::TypeNS))?;
+            f.write_str(&s)
         })
     }
 }
