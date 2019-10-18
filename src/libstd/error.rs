@@ -616,6 +616,11 @@ impl Error for char::ParseCharError {
     }
 }
 
+#[unstable(feature = "try_trait", issue = "42327")]
+impl Error for core::option::NoneError {
+    fn description(&self) -> &str { "None found" }
+}
+
 // Copied from `any.rs`.
 impl dyn Error + 'static {
     /// Returns `true` if the boxed type is the same as `T`

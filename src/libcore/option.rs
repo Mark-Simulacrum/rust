@@ -1542,6 +1542,13 @@ impl<A, V: FromIterator<A>> FromIterator<Option<A>> for Option<V> {
 pub struct NoneError;
 
 #[unstable(feature = "try_trait", issue = "42327")]
+impl fmt::Display for NoneError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "NoneError")
+    }
+}
+
+#[unstable(feature = "try_trait", issue = "42327")]
 impl<T> ops::Try for Option<T> {
     type Ok = T;
     type Error = NoneError;
