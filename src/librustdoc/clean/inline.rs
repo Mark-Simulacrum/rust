@@ -428,8 +428,35 @@ fn build_module(cx: &DocContext<'_>, did: DefId, visited: &mut FxHashSet<DefId>)
         // two namespaces, so the target may be listed twice. Make sure we only
         // visit each node at most once.
         for &item in cx.tcx.item_children(did).iter() {
-            let def_id = item.res.def_id();
             if item.vis == ty::Visibility::Public {
+                let def_id = if let Res::PrimTy(p) = item.res {
+                    let p = match p {
+                        hir::PrimTy::Int(ty) => ty.into(),
+                        hir::PrimTy::Uint(ty) => ty.into(),
+                        hir::PrimTy::Float(ty) => ty.into(),
+                        hir::PrimTy::Str => clean::PrimitiveType::Str,
+                        hir::PrimTy::Bool => clean::PrimitiveType::Bool,
+                        hir::PrimTy::Char => clean::PrimitiveType::Char,
+                    };
+                    let did = cx.primitives.get(&p).expect("known primitive location").clone();
+                    cx.renderinfo.borrow_mut().inlined.insert(did);
+                    let attrs = load_attrs(cx, did);
+                    items.push(clean::Item {
+                        source: cx.tcx.def_span(did).clean(cx),
+                        name: Some(item.ident.name.clean(cx)),
+                        attrs: attrs.clean(cx),
+                        inner: clean::ItemEnum::PrimitiveItem(p),
+                        visibility: clean::Public,
+                        stability: cx.tcx.lookup_stability(did).clean(cx),
+                        deprecation: cx.tcx.lookup_deprecation(did).clean(cx),
+                        def_id: did,
+                    });
+
+                    continue;
+                } else {
+                    item.res.def_id()
+                };
+
                 if did == def_id || !visited.insert(def_id) {
                     continue;
                 }

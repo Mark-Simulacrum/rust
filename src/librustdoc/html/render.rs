@@ -272,6 +272,7 @@ pub struct RenderInfo {
     pub deref_trait_did: Option<DefId>,
     pub deref_mut_trait_did: Option<DefId>,
     pub owned_box_did: Option<DefId>,
+    pub primitive_locations: FxHashMap<clean::PrimitiveType, DefId>,
 }
 
 // Helper structs for rendering items/sidebars and carrying along contextual

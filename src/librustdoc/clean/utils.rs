@@ -39,6 +39,17 @@ pub fn krate(mut cx: &mut DocContext<'_>) -> Crate {
     }
     externs.sort_by(|&(a, _), &(b, _)| a.cmp(&b));
 
+    let ExternalCrate { name, src, primitives, keywords, .. } = LOCAL_CRATE.clean(cx);
+
+    for &(_, ref e) in externs.iter().rev() {
+        for &(def_id, prim, _) in &e.primitives {
+            cx.primitives.insert(prim, def_id);
+        }
+    }
+    for &(def_id, prim, _) in &primitives {
+        cx.primitives.insert(prim, def_id);
+    }
+
     // Clean the crate, translating the entire libsyntax AST to one that is
     // understood by rustdoc.
     let mut module = module.clean(cx);
@@ -60,7 +71,6 @@ pub fn krate(mut cx: &mut DocContext<'_>) -> Crate {
         _ => unreachable!(),
     }
 
-    let ExternalCrate { name, src, primitives, keywords, .. } = LOCAL_CRATE.clean(cx);
     {
         let m = match module.inner {
             ItemEnum::ModuleItem(ref mut m) => m,

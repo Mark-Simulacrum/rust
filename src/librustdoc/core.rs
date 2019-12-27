@@ -66,6 +66,7 @@ pub struct DocContext<'tcx> {
     // FIXME(eddyb) make this a `ty::TraitRef<'tcx>` set.
     pub generated_synthetics: RefCell<FxHashSet<(Ty<'tcx>, DefId)>>,
     pub auto_traits: Vec<DefId>,
+    pub primitives: FxHashMap<clean::PrimitiveType, DefId>,
 }
 
 impl<'tcx> DocContext<'tcx> {
@@ -415,6 +416,7 @@ pub fn run_core(options: RustdocOptions) -> (clean::Crate, RenderInfo, RenderOpt
                         .cloned()
                         .filter(|trait_def_id| tcx.trait_is_auto(*trait_def_id))
                         .collect(),
+                    primitives: Default::default(),
                 };
                 debug!("crate: {:?}", tcx.hir().krate());
 

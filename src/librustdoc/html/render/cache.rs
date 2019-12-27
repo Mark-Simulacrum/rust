@@ -139,6 +139,7 @@ impl Cache {
             deref_trait_did,
             deref_mut_trait_did,
             owned_box_did,
+            primitive_locations,
         } = renderinfo;
 
         let external_paths =
@@ -155,7 +156,7 @@ impl Cache {
             search_index: Vec::new(),
             parent_is_trait_impl: false,
             extern_locations: Default::default(),
-            primitive_locations: Default::default(),
+            primitive_locations,
             stripped_mod: false,
             access_levels,
             crate_version: krate.version.take(),
@@ -185,19 +186,6 @@ impl Cache {
 
             let did = DefId { krate: n, index: CRATE_DEF_INDEX };
             cache.external_paths.insert(did, (vec![e.name.to_string()], ItemType::Module));
-        }
-
-        // Cache where all known primitives have their documentation located.
-        //
-        // Favor linking to as local extern as possible, so iterate all crates in
-        // reverse topological order.
-        for &(_, ref e) in krate.externs.iter().rev() {
-            for &(def_id, prim, _) in &e.primitives {
-                cache.primitive_locations.insert(prim, def_id);
-            }
-        }
-        for &(def_id, prim, _) in &krate.primitives {
-            cache.primitive_locations.insert(prim, def_id);
         }
 
         cache.stack.push(krate.name.clone());
