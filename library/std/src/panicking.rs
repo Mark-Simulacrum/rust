@@ -453,7 +453,9 @@ pub fn begin_panic<M: Any + Send>(msg: M) -> ! {
         intrinsics::abort()
     }
 
-    rust_panic_with_hook(&mut PanicPayload::new(msg), None, Location::caller());
+    return crate::sys_common::backtrace::__rust_end_short_backtrace(move || {
+        rust_panic_with_hook(&mut PanicPayload::new(msg), None, Location::caller())
+    });
 
     struct PanicPayload<A> {
         inner: Option<A>,
