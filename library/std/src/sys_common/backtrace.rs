@@ -126,7 +126,12 @@ where
     F: Send,
     T: Send,
 {
-    f()
+    let result = f();
+
+    // prevent this frame from being tail-call optimised away
+    crate::hint::black_box(());
+
+    result
 }
 
 pub enum RustBacktrace {
