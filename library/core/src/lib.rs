@@ -354,3 +354,5 @@ pub mod arch {
         /* compiler built-in */
     }
 }
+
+include!(concat!("../../std/src/primitive_docs.rs"));
