@@ -7,7 +7,7 @@ rm -rf /tmp/rustc-pgo
 python3 ../x.py build --target=$PGO_HOST --host=$PGO_HOST \
     --stage 2 library/std --rust-profile-generate=/tmp/rustc-pgo
 
-RUSTC_BOOTSTRAP=1 ./build/$PGO_HOST/stage2/bin/rustc --edition=2018 \
+CARGO_PKG_NAME=core RUSTC_BOOTSTRAP=1 ./build/$PGO_HOST/stage2/bin/rustc --edition=2018 \
     --crate-type=lib ../library/core/src/lib.rs
 
 # Download and build a single-file stress test benchmark on perf.rust-lang.org.
