@@ -1,9 +1,6 @@
 error[E0282]: type annotations needed
   --> $DIR/pat-tuple-bad-type.rs:5:9
    |
-LL |     let x;
-   |         - consider giving `x` a type
-...
 LL |         (..) => {}
    |         ^^^^ cannot infer type
    |

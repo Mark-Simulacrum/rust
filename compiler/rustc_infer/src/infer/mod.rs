@@ -1013,7 +1013,7 @@ impl<'a, 'tcx> InferCtxt<'a, 'tcx> {
         let r_b = self.shallow_resolve(predicate.skip_binder().b);
         match (r_a.kind(), r_b.kind()) {
             (&ty::Infer(ty::TyVar(a_vid)), &ty::Infer(ty::TyVar(b_vid))) => {
-                self.inner.borrow_mut().type_variables().sub(a_vid, b_vid);
+                //self.inner.borrow_mut().type_variables().sub(a_vid, b_vid);
                 return None;
             }
             _ => {}

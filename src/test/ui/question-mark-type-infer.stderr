@@ -1,14 +1,10 @@
 error[E0284]: type annotations needed
-  --> $DIR/question-mark-type-infer.rs:12:21
+  --> $DIR/question-mark-type-infer.rs:12:5
    |
 LL |     l.iter().map(f).collect()?
-   |                     ^^^^^^^ cannot infer type
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^ cannot infer type
    |
    = note: cannot satisfy `<_ as Try>::Residual == _`
-help: consider specifying the type argument in the method call
-   |
-LL |     l.iter().map(f).collect::<B>()?
-   |                            +++++
 
 error: aborting due to previous error
 
