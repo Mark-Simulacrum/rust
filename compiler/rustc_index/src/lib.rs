@@ -3,6 +3,7 @@
 #![feature(extend_one)]
 #![feature(iter_zip)]
 #![feature(min_specialization)]
+#![feature(step_trait)]
 #![feature(test)]
 
 pub mod bit_set;

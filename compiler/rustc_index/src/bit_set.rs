@@ -4,7 +4,7 @@ use std::fmt;
 use std::iter;
 use std::marker::PhantomData;
 use std::mem;
-use std::ops::{BitAnd, BitAndAssign, BitOrAssign, Not, Range, Shl};
+use std::ops::{BitAnd, BitAndAssign, BitOrAssign, Bound, Not, Range, RangeBounds, Shl};
 use std::slice;
 
 use rustc_macros::{Decodable, Encodable};
@@ -151,6 +151,47 @@ impl<T: Idx> BitSet<T> {
         new_word != word
     }
 
+    #[inline]
+    pub fn insert_range(&mut self, elems: impl RangeBounds<T>) {
+        let start = match elems.start_bound().cloned() {
+            Bound::Included(start) => start.index(),
+            Bound::Excluded(start) => start.index() + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match elems.end_bound().cloned() {
+            Bound::Included(end) => end.index() + 1,
+            Bound::Excluded(end) => end.index(),
+            Bound::Unbounded => self.domain_size - 1,
+        };
+        // <= because end is exclusive in this code.
+        assert!(end <= self.domain_size, "{} <= {}", end, self.domain_size);
+        if start > end {
+            return;
+        }
+
+        let (start_word_index, start_mask) = word_index_and_mask(start);
+        let (end_word_index, end_mask) = word_index_and_mask(end);
+
+        // Set all words in between start and end (exclusively of both).
+        for word_index in (start_word_index + 1)..end_word_index {
+            self.words[word_index] = !0;
+        }
+
+        if start_word_index != end_word_index {
+            // Start and end are in different words, so we handle each in turn.
+            // We set all leading bits (since bits are "higher" towards the
+            // leading end). This includes the start_mask bit.
+            self.words[start_word_index] |= !(start_mask - 1);
+            // And all trailing bits in the end word, excluding the end mask.
+            self.words[end_word_index] |= end_mask - 1;
+        } else {
+            for elem in start..end {
+                let (_, mask) = word_index_and_mask(elem);
+                self.words[start_word_index] |= mask;
+            }
+        }
+    }
+
     /// Sets all bits to true.
     pub fn insert_all(&mut self) {
         for word in &mut self.words {
@@ -225,6 +266,59 @@ impl<T: Idx> BitSet<T> {
         not_already |= self.words[current_index + 1..].iter().any(|&x| x != 0);
 
         not_already
+    }
+
+    fn last_set_in(&self, range: impl RangeBounds<T>) -> Option<T> {
+        // inclusive
+        let start = match range.start_bound().cloned() {
+            Bound::Included(start) => start.index(),
+            Bound::Excluded(start) => start.index() + 1,
+            Bound::Unbounded => 0,
+        };
+        // inclusive
+        let end = match range.end_bound().cloned() {
+            Bound::Included(end) => end.index(),
+            Bound::Excluded(end) => end.index().checked_sub(1)?,
+            Bound::Unbounded => self.domain_size() - 1,
+        };
+        if start > end {
+            return None;
+        }
+        let (start_word_index, _) = word_index_and_mask(start);
+        let (end_word_index, _) = word_index_and_mask(end);
+
+        let mut last_leq = None;
+
+        for e in BitIter::<usize>::new(&[self.words[end_word_index]])
+            .map(|v| v + WORD_BITS * end_word_index)
+        {
+            if e <= end {
+                last_leq = Some(e);
+            }
+        }
+
+        if let Some(found) = last_leq {
+            if start <= found {
+                return Some(T::new(found));
+            }
+        }
+
+        // We exclude end_word_index from the range here, because we don't want
+        // to limit ourselves to *just* the last word: the bits set it in may be
+        // after `end`, so it may not work out.
+        if let Some(offset) =
+            self.words[start_word_index..end_word_index].iter().rposition(|&w| w != 0)
+        {
+            let prev_idx = start_word_index + offset;
+            let start_word = self.words[prev_idx];
+            let last_bit = WORD_BITS - 1 - start_word.leading_zeros() as usize;
+            let pos = last_bit + WORD_BITS * prev_idx;
+            if start <= pos {
+                return Some(T::new(pos));
+            }
+        }
+
+        None
     }
 
     bit_relations_inherent_impls! {}
@@ -635,6 +729,16 @@ impl<T: Idx> SparseBitSet<T> {
         self.elems.iter()
     }
 
+    fn last_set_in(&self, range: impl RangeBounds<T>) -> Option<T> {
+        let mut last_leq = None;
+        for e in self.iter() {
+            if range.contains(e) {
+                last_leq = Some(*e);
+            }
+        }
+        last_leq
+    }
+
     bit_relations_inherent_impls! {}
 }
 
@@ -709,6 +813,16 @@ impl<T: Idx> HybridBitSet<T> {
         }
     }
 
+    /// Returns the previous element present in the bitset from `elem`,
+    /// inclusively of elem. That is, will return `Some(elem)` if elem is in the
+    /// bitset.
+    pub fn last_set_in(&self, range: impl RangeBounds<T>) -> Option<T> {
+        match self {
+            HybridBitSet::Sparse(sparse) => sparse.last_set_in(range),
+            HybridBitSet::Dense(dense) => dense.last_set_in(range),
+        }
+    }
+
     pub fn insert(&mut self, elem: T) -> bool {
         // No need to check `elem` against `self.domain_size` here because all
         // the match cases check it, one way or another.
@@ -731,6 +845,41 @@ impl<T: Idx> HybridBitSet<T> {
                 changed
             }
             HybridBitSet::Dense(dense) => dense.insert(elem),
+        }
+    }
+
+    pub fn insert_range(&mut self, elems: impl RangeBounds<T>) {
+        // No need to check `elem` against `self.domain_size` here because all
+        // the match cases check it, one way or another.
+        let start = match elems.start_bound().cloned() {
+            Bound::Included(start) => start.index(),
+            Bound::Excluded(start) => start.index() + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match elems.end_bound().cloned() {
+            Bound::Included(end) => end.index() + 1,
+            Bound::Excluded(end) => end.index(),
+            Bound::Unbounded => self.domain_size() - 1,
+        };
+        let len = if let Some(l) = end.checked_sub(start) {
+            l
+        } else {
+            return;
+        };
+        match self {
+            HybridBitSet::Sparse(sparse) if sparse.len() + len < SPARSE_MAX => {
+                // The set is sparse and has space for `elems`.
+                for elem in start..end {
+                    sparse.insert(T::new(elem));
+                }
+            }
+            HybridBitSet::Sparse(sparse) => {
+                // The set is sparse and full. Convert to a dense set.
+                let mut dense = sparse.to_dense();
+                dense.insert_range(elems);
+                *self = HybridBitSet::Dense(dense);
+            }
+            HybridBitSet::Dense(dense) => dense.insert_range(elems),
         }
     }
 
